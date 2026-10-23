@@ -1,0 +1,6 @@
+{
+  "name": "taplocalin - Dynamic Redirect & QR Code Platform",
+  "description": "taplocalin dynamic redirect link generator and QR code management platform with real-time analytics, destination updating, and multi-QR batch printing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
