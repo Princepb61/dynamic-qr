@@ -18,14 +18,12 @@ interface LinkAnalyticsModalProps {
   link: LinkRecord | null;
   isOpen: boolean;
   onClose: () => void;
-  onOpenSimulatorForLink: (linkId: string) => void;
 }
 
 export const LinkAnalyticsModal: React.FC<LinkAnalyticsModalProps> = ({
   link,
   isOpen,
   onClose,
-  onOpenSimulatorForLink,
 }) => {
   const [analytics, setAnalytics] = useState<LinkAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
@@ -78,18 +76,18 @@ export const LinkAnalyticsModal: React.FC<LinkAnalyticsModalProps> = ({
       : '';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-      <div className="bg-white rounded-2xl max-w-4xl w-full border border-neutral-200 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+      <div className="bg-white dark:bg-neutral-900 rounded-2xl max-w-4xl w-full border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150 transition-colors">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
           <div className="space-y-0.5">
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-bold text-neutral-900">{link.title}</h3>
-              <span className="text-xs font-mono text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded">
+              <h3 className="text-base font-bold text-neutral-900 dark:text-white">{link.title}</h3>
+              <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded font-medium">
                 /r/{link.slug}
               </span>
             </div>
-            <p className="text-xs text-neutral-500 truncate max-w-lg font-mono">
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate max-w-lg font-mono">
               Redirects to: {link.destinationUrl}
             </p>
           </div>
@@ -149,18 +147,20 @@ export const LinkAnalyticsModal: React.FC<LinkAnalyticsModalProps> = ({
               </span>
             </div>
 
-            <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-xl flex flex-col justify-between">
+            <div className="p-4 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl flex flex-col justify-between">
               <div>
-                <span className="text-xs text-neutral-500 font-medium">Test Dynamic Link</span>
-                <div className="text-sm font-semibold text-neutral-900 mt-1">Live Simulation</div>
+                <span className="text-xs text-neutral-500 dark:text-neutral-400 font-bold">Dynamic Short Link</span>
+                <div className="text-sm font-bold text-neutral-900 dark:text-white mt-1 truncate">/r/{link.slug}</div>
               </div>
-              <button
-                onClick={() => onOpenSimulatorForLink(link.id)}
-                className="mt-2 flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg transition-colors shadow-2xs"
+              <a
+                href={`${typeof window !== 'undefined' ? window.location.origin : ''}/r/${link.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-bold bg-neutral-950 dark:bg-indigo-600 hover:bg-neutral-800 dark:hover:bg-indigo-500 text-white rounded-lg transition-colors shadow-2xs"
               >
-                <Zap className="w-3.5 h-3.5 text-amber-400" />
-                <span>Simulate Hit</span>
-              </button>
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Test Live Link</span>
+              </a>
             </div>
           </div>
 

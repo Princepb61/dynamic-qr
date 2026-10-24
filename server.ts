@@ -398,7 +398,8 @@ function saveDatabase(data: DatabaseSchema): void {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  // AI Studio environment requires dev server on port 3000
+  const PORT = 3000;
 
   app.use(express.json());
 
@@ -1459,7 +1460,7 @@ async function startServer() {
 
   if (!isProduction) {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: 'spa',
     });
     app.use(vite.middlewares);

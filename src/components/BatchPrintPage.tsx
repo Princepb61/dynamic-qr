@@ -18,12 +18,14 @@ import {
   Tag,
   SlidersHorizontal,
   Trash2,
+  Download,
 } from 'lucide-react';
+import { getLast4Letters } from '../utils/a4QrHelper';
 
 interface BatchPrintPageProps {
   links: LinkRecord[];
   onRefreshLinks: () => Promise<void>;
-  onOpenSimulatorForLink: (linkId: string) => void;
+  onOpenSimulatorForLink?: (linkId: string) => void;
   onDeleteLink?: (id: string) => Promise<void> | void;
 }
 
@@ -174,45 +176,45 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Banner (Hidden in print) */}
-      <div className="bg-white border border-neutral-200 rounded-xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
+      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden transition-colors">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold text-neutral-900">Multi-QR Print & Dynamic Link Assignment</h2>
-            <span className="px-2 py-0.5 text-[11px] font-semibold bg-indigo-50 text-indigo-700 rounded-md">
+            <h2 className="text-base font-bold text-neutral-900 dark:text-white">Multi-QR Print & Dynamic Link Assignment</h2>
+            <span className="px-2 py-0.5 text-[11px] font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-md">
               Pre-Printed Stock Engine
             </span>
           </div>
-          <p className="text-xs text-neutral-500 mt-0.5">
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 font-medium">
             Print sheets of blank QR codes in bulk. After printing, scan any code or assign destination URLs from this admin console anytime!
           </p>
         </div>
 
         {/* View Switcher Tabs */}
-        <div className="flex items-center gap-1 p-1 bg-neutral-100 rounded-lg shrink-0">
+        <div className="grid grid-cols-2 gap-1 p-1 bg-neutral-100 dark:bg-neutral-800 rounded-lg w-full sm:w-auto shrink-0">
           <button
             onClick={() => setActiveSubTab('print')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+            className={`px-3 py-2 text-xs font-bold rounded-md transition-colors text-center ${
               activeSubTab === 'print'
-                ? 'bg-white text-neutral-900 shadow-xs'
-                : 'text-neutral-600 hover:text-neutral-900'
+                ? 'bg-white dark:bg-neutral-900 text-neutral-950 dark:text-white shadow-xs'
+                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
             }`}
           >
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center justify-center gap-1.5">
               <Printer className="w-3.5 h-3.5" />
-              <span>Multi-QR Print Sheet</span>
+              <span>Multi-QR Print</span>
             </span>
           </button>
           <button
             onClick={() => setActiveSubTab('inventory')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+            className={`px-3 py-2 text-xs font-bold rounded-md transition-colors text-center ${
               activeSubTab === 'inventory'
-                ? 'bg-white text-neutral-900 shadow-xs'
-                : 'text-neutral-600 hover:text-neutral-900'
+                ? 'bg-white dark:bg-neutral-900 text-neutral-950 dark:text-white shadow-xs'
+                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
             }`}
           >
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center justify-center gap-1.5">
               <Layers className="w-3.5 h-3.5" />
-              <span>Unassigned QR Inventory ({unassignedCount})</span>
+              <span>Stock ({unassignedCount})</span>
             </span>
           </button>
         </div>
@@ -301,12 +303,12 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                 <span className="font-semibold text-neutral-800">Workflow:</span>
                 <span>Click Generate to create batch stock links, then click Print Sheet to print physical copies.</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={handleGenerateBatch}
                   disabled={isGenerating}
-                  className="px-4 py-2 text-xs font-semibold text-neutral-800 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors flex items-center gap-1.5"
+                  className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold text-neutral-800 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors flex items-center justify-center gap-1.5"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>{isGenerating ? 'Generating...' : `Generate ${batchCount} New Blank Codes`}</span>
@@ -314,17 +316,17 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 rounded-lg transition-colors shadow-xs flex items-center gap-1.5"
+                  className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-bold text-white bg-neutral-900 hover:bg-neutral-800 rounded-lg transition-colors shadow-xs flex items-center justify-center gap-1.5"
                 >
                   <Printer className="w-3.5 h-3.5" />
-                  <span>Print QR Code Sheet Now</span>
+                  <span>Print A4 QR Code Sheet</span>
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Printable Sheet Canvas */}
-          <div className="bg-white border border-neutral-200 rounded-xl p-8 shadow-xs print:border-0 print:p-0 print:shadow-none">
+          {/* Printable Sheet Canvas - A4 Print Layout */}
+          <div id="printable-sheet" className="printable-a4-container bg-white border border-neutral-200 rounded-xl p-8 shadow-xs print:border-0 print:p-0 print:shadow-none">
             {/* Sheet Header (Included in print) */}
             <div className="mb-6 pb-4 border-b border-neutral-200 flex items-center justify-between">
               <div>
@@ -332,7 +334,7 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                   {batchName}
                 </h1>
                 <p className="text-xs text-neutral-500 font-mono">
-                  Pre-Printed Dynamic QR Stock · Showing {generatedBatchLinks.length} endpoints
+                  A4 Multi-QR Stock · Showing {generatedBatchLinks.length} endpoints · Simple QR
                 </p>
               </div>
               <div className="text-right text-xs text-neutral-500 font-mono">
@@ -368,13 +370,20 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                       </span>
                     </div>
 
-                    {/* QR Code Canvas */}
-                    <div className="p-2 bg-white rounded-lg border border-neutral-200 my-1 shadow-2xs">
+                    {/* Borderless QR Code Canvas */}
+                    <div className="p-1 bg-white my-1 flex items-center justify-center">
                       <QRCodeCanvas url={fullRedirectUrl} size={gridCols === 2 ? 160 : gridCols === 3 ? 130 : 100} />
                     </div>
 
+                    {/* Under the QR: Mention ONLY the batch code (No outline border, no "last 4" label) */}
+                    <div className="my-0.5 text-center">
+                      <span className="text-sm font-mono font-black text-neutral-950 tracking-widest">
+                        {getLast4Letters(link.slug)}
+                      </span>
+                    </div>
+
                     {/* Bottom Slug & Cut Indicator */}
-                    <div className="w-full mt-2 pt-2 border-t border-neutral-100">
+                    <div className="w-full mt-1.5 pt-1.5 border-t border-neutral-100">
                       <div className="text-xs font-bold text-neutral-900 truncate">
                         {link.title}
                       </div>
@@ -478,30 +487,30 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                 />
               </div>
 
-              <div className="flex items-center gap-1 p-1 bg-neutral-100 rounded-lg shrink-0">
+              <div className="grid grid-cols-3 gap-1 p-1 bg-neutral-100 rounded-lg w-full sm:w-auto shrink-0 text-center">
                 <button
                   onClick={() => setInventoryFilter('unassigned')}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors truncate ${
                     inventoryFilter === 'unassigned'
                       ? 'bg-white text-amber-700 font-semibold shadow-xs'
                       : 'text-neutral-600 hover:text-neutral-900'
                   }`}
                 >
-                  Unassigned Stock ({unassignedCount})
+                  Unassigned ({unassignedCount})
                 </button>
                 <button
                   onClick={() => setInventoryFilter('assigned')}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors truncate ${
                     inventoryFilter === 'assigned'
                       ? 'bg-white text-emerald-700 font-semibold shadow-xs'
                       : 'text-neutral-600 hover:text-neutral-900'
                   }`}
                 >
-                  Assigned & Live ({assignedCount})
+                  Assigned ({assignedCount})
                 </button>
                 <button
                   onClick={() => setInventoryFilter('all')}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors truncate ${
                     inventoryFilter === 'all'
                       ? 'bg-white text-neutral-900 shadow-xs'
                       : 'text-neutral-600 hover:text-neutral-900'
@@ -512,7 +521,98 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile Card View (Phone screen friendly) */}
+            <div className="block md:hidden divide-y divide-neutral-100 font-sans">
+              {filteredInventory.length === 0 ? (
+                <div className="p-8 text-center text-neutral-400 text-xs">
+                  No QR codes matching the current filter.
+                </div>
+              ) : (
+                filteredInventory.map((link) => {
+                  const isUnassigned = link.isAssigned === false || !link.destinationUrl || link.destinationUrl.trim() === '';
+                  const fullRedirectUrl = `${baseUrl}/r/${link.slug}`;
+
+                  return (
+                    <div key={link.id} className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="text-sm font-bold text-neutral-900 leading-tight">{link.title}</h4>
+                          <span className="text-xs font-mono text-neutral-500 block mt-0.5">/r/{link.slug}</span>
+                          {link.batchName && (
+                            <span className="text-[10px] text-neutral-400 block mt-0.5">
+                              Batch: {link.batchName}
+                            </span>
+                          )}
+                        </div>
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                          isUnassigned ? 'text-amber-700 bg-amber-50 border border-amber-200' : 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+                        }`}>
+                          {isUnassigned ? 'Unassigned' : 'Live Redirect'}
+                        </span>
+                      </div>
+
+                      <div className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-100 text-xs space-y-1">
+                        <div className="text-[11px] font-semibold text-neutral-500">Destination:</div>
+                        {isUnassigned ? (
+                          <div className="text-amber-700 font-mono text-[11px] flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-amber-500" />
+                            <span>Waiting for destination URL</span>
+                          </div>
+                        ) : (
+                          <div className="font-mono text-neutral-800 text-[11px] truncate">
+                            {link.destinationUrl}
+                          </div>
+                        )}
+                        <div className="text-[11px] text-neutral-500 pt-1 flex items-center justify-between">
+                          <span>Total Scans:</span>
+                          <span className="font-bold text-neutral-900 font-mono">{link.totalClicks}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          onClick={() => {
+                            setAssigningLink(link);
+                            setDestinationUrl(link.destinationUrl || '');
+                            setAssignTitle(link.title);
+                            setAssignError(null);
+                            setAssignSuccess(null);
+                          }}
+                          className="flex-1 py-2 text-xs font-bold text-white bg-neutral-900 hover:bg-neutral-800 rounded-lg text-center shadow-xs"
+                        >
+                          {isUnassigned ? 'Assign Destination' : 'Edit Target'}
+                        </button>
+                        <a
+                          href={fullRedirectUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 text-neutral-600 bg-neutral-100 rounded-lg hover:bg-neutral-200"
+                          title="Test Link"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                        {onDeleteLink && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Delete QR code "/r/${link.slug}"?`)) {
+                                onDeleteLink(link.id);
+                              }
+                            }}
+                            className="p-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs divide-y divide-neutral-200">
                 <thead className="bg-neutral-50 text-neutral-600 font-semibold uppercase">
                   <tr>
@@ -625,10 +725,10 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
       {/* MODAL: ASSIGN DESTINATION URL TO PRE-PRINTED QR CODE */}
       {/* ========================================================================= */}
       {assigningLink && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-lg w-full border border-neutral-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-neutral-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between">
+            <div className="px-5 sm:px-6 py-4 border-b border-neutral-100 flex items-center justify-between shrink-0">
               <div>
                 <h3 className="text-base font-bold text-neutral-900">Link Destination to QR Code</h3>
                 <p className="text-xs text-neutral-500 font-mono">Pre-printed endpoint: /r/{assigningLink.slug}</p>
@@ -642,7 +742,7 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSaveAssignment} className="p-6 space-y-4">
+            <form onSubmit={handleSaveAssignment} className="p-5 sm:p-6 space-y-4 overflow-y-auto">
               <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
                 <ShieldCheck className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
@@ -695,19 +795,19 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
               </div>
 
               {/* Actions */}
-              <div className="pt-3 border-t border-neutral-100 flex items-center justify-end gap-3">
+              <div className="pt-3 border-t border-neutral-100 flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => setAssigningLink(null)}
                   disabled={isSavingAssignment}
-                  className="px-4 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors"
+                  className="w-full sm:w-auto px-4 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors text-center"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSavingAssignment}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 rounded-lg transition-colors shadow-xs flex items-center gap-1.5"
+                  className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 rounded-lg transition-colors shadow-xs flex items-center justify-center gap-1.5"
                 >
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                   <span>{isSavingAssignment ? 'Linking...' : 'Bind Destination URL Now'}</span>
@@ -732,9 +832,9 @@ const QRCodeCanvas: React.FC<{ url: string; size: number }> = ({ url, size }) =>
       url,
       {
         width: size,
-        margin: 1,
+        margin: 2,
         color: {
-          dark: '#0f172a',
+          dark: '#000000',
           light: '#ffffff',
         },
         errorCorrectionLevel: 'H',

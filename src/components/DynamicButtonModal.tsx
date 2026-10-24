@@ -197,31 +197,31 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-      <div className="bg-white rounded-2xl max-w-4xl w-full border border-neutral-200 shadow-2xl overflow-hidden flex flex-col max-h-[94vh] animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs">
+      <div className="bg-white dark:bg-neutral-900 rounded-2xl max-w-4xl w-full border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col max-h-[94vh] animate-in fade-in zoom-in-95 duration-150 transition-colors">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-neutral-900">Dynamic Button Studio</h3>
-              <p className="text-xs text-neutral-500 font-mono">
+              <h3 className="text-base font-bold text-neutral-900 dark:text-white">Dynamic Button Studio</h3>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 font-mono truncate max-w-[220px] sm:max-w-md">
                 Dynamic route: /r/{link.slug} &bull; Destination can be changed anytime
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
+            className="p-1 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div className="p-4 sm:p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
           {/* Left Column: Live Interactive Preview & Embed Codes (7 cols) */}
           <div className="lg:col-span-7 space-y-6">
             <div>
@@ -510,11 +510,11 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
             </div>
 
             {/* Save Button */}
-            <div className="pt-3 border-t border-neutral-100 flex items-center justify-end gap-2.5">
+            <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800 flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 sm:gap-2.5">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 rounded-lg transition-colors"
+                className="w-full sm:w-auto px-4 py-2.5 text-xs font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors text-center"
               >
                 Cancel
               </button>
@@ -522,7 +522,7 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
                 type="button"
                 onClick={handleSave}
                 disabled={isSaving}
-                className="px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors shadow-xs flex items-center gap-1.5"
+                className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors shadow-xs flex items-center justify-center gap-1.5"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>{isSaving ? 'Saving...' : 'Apply & Save Dynamic Button'}</span>

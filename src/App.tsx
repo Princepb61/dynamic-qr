@@ -5,19 +5,44 @@ import { LinksTable } from './components/LinksTable';
 import { CreateLinkModal } from './components/CreateLinkModal';
 import { EditDestinationModal } from './components/EditDestinationModal';
 import { QRStudioModal } from './components/QRStudioModal';
-import { LinkAnalyticsModal } from './components/LinkAnalyticsModal';
-import { ScanSimulatorModal } from './components/ScanSimulatorModal';
 import { QRPrintCenter } from './components/QRPrintCenter';
-import { AnalyticsView } from './components/AnalyticsView';
 import { ClientApprovalsView } from './components/ClientApprovalsView';
 import { BatchPrintPage } from './components/BatchPrintPage';
 import { AuthPage } from './components/AuthPage';
+import { ClientRedirectHandler } from './components/ClientRedirectHandler';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { LinkRecord, GlobalOverview, UserRecord, ClientAccount } from './types';
 import { api } from './services/api';
-import { RefreshCw, QrCode, LogOut, Shield, User } from 'lucide-react';
+import { RefreshCw, Plus } from 'lucide-react';
 
 export default function App() {
+  // Global Dark Mode Theme State
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('taplocalin_theme');
+      if (saved) return saved === 'dark';
+      return typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (darkMode) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('taplocalin_theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('taplocalin_theme', 'light');
+      }
+    } catch (e) {
+      console.error('Theme sync error', e);
+    }
+  }, [darkMode]);
+
+  const toggleDarkMode = () => setDarkMode((prev) => !prev);
+
   // Auth state
   const [currentUser, setCurrentUser] = useState<UserRecord | null>(() => {
     try {
@@ -28,7 +53,15 @@ export default function App() {
     }
   });
 
-  const [activeTab, setActiveTab] = useState<'links' | 'analytics' | 'clients' | 'batch-print' | 'print' | 'simulator'>('links');
+  const [activeTab, setActiveTab] = useState<'links' | 'clients' | 'batch-print' | 'print'>('links');
+  // Dynamic redirect slug detection for Netlify SPA deployments
+  const [redirectSlug] = useState<string | null>(() => {
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/r/')) {
+      const s = window.location.pathname.replace(/^\/r\//, '').trim();
+      return s || null;
+    }
+    return null;
+  });
   const [links, setLinks] = useState<LinkRecord[]>([]);
   const [overview, setOverview] = useState<GlobalOverview | null>(null);
   const [clients, setClients] = useState<ClientAccount[]>([]);
@@ -37,12 +70,8 @@ export default function App() {
 
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
-  const [simulatorInitialLinkId, setSimulatorInitialLinkId] = useState<string | undefined>(undefined);
-
   const [activeQRLink, setActiveQRLink] = useState<LinkRecord | null>(null);
   const [activeEditLink, setActiveEditLink] = useState<LinkRecord | null>(null);
-  const [activeAnalyticsLink, setActiveAnalyticsLink] = useState<LinkRecord | null>(null);
   const [selectedPrintLink, setSelectedPrintLink] = useState<LinkRecord | null>(null);
 
   // Toasts
@@ -220,18 +249,29 @@ export default function App() {
     }
   };
 
-  const openSimulatorForLink = (linkId: string) => {
-    setSimulatorInitialLinkId(linkId);
-    setIsSimulatorOpen(true);
-  };
+  // Handle direct dynamic link scan / redirection on Netlify SPA
+  if (redirectSlug) {
+    return <ClientRedirectHandler slug={redirectSlug} />;
+  }
 
   // If not logged in, render the Authentication & Client Portal page
   if (!currentUser) {
     return (
-      <>
-        <AuthPage onLoginSuccess={handleLoginSuccess} />
-        <ToastContainer toasts={toasts} onDismiss={removeToast} />
-      </>
+      <div className={darkMode ? 'dark' : ''}>
+        <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 transition-colors">
+          <div className="absolute top-4 right-4 z-50">
+            <button
+              onClick={toggleDarkMode}
+              className="p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-xs text-xs font-bold"
+              aria-label="Toggle dark mode"
+            >
+              {darkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
+            </button>
+          </div>
+          <AuthPage onLoginSuccess={handleLoginSuccess} />
+          <ToastContainer toasts={toasts} onDismiss={removeToast} />
+        </div>
+      </div>
     );
   }
 
@@ -239,36 +279,33 @@ export default function App() {
   const unassignedCount = links.filter((l) => l.isAssigned === false || !l.destinationUrl || l.destinationUrl.trim() === '').length;
 
   return (
-    <div className="min-h-screen bg-neutral-50 flex flex-col font-sans">
-      {/* Top Bar Header with Role Context */}
+    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 flex flex-col font-sans transition-colors">
+      {/* Top Bar Header with Bold Typography & Dark Theme Toggle */}
       <Header
         user={currentUser}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         pendingClientsCount={pendingClientsCount}
         unassignedCount={unassignedCount}
-        onOpenCreate={() => setIsCreateOpen(true)}
-        onOpenSimulator={() => {
-          setSimulatorInitialLinkId(links[0]?.id);
-          setIsSimulatorOpen(true);
-        }}
+        darkMode={darkMode}
+        onToggleDarkMode={toggleDarkMode}
         onLogout={handleLogout}
       />
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* Main Container - Mobile Optimized Padding */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-4 sm:space-y-8">
         {loading && links.length === 0 ? (
           <div className="py-24 text-center space-y-4">
             <RefreshCw className="w-8 h-8 text-neutral-400 animate-spin mx-auto" />
-            <p className="text-sm text-neutral-500">Connecting to Dynamic Redirection Service...</p>
+            <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">Connecting to Dynamic Redirection Service...</p>
           </div>
         ) : error && links.length === 0 ? (
-          <div className="p-6 bg-red-50 border border-red-200 rounded-xl max-w-md mx-auto text-center space-y-3">
-            <p className="text-sm font-semibold text-red-800">Connection Error</p>
-            <p className="text-xs text-red-600">{error}</p>
+          <div className="p-6 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl max-w-md mx-auto text-center space-y-3">
+            <p className="text-sm font-bold text-red-800 dark:text-red-300">Connection Error</p>
+            <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
             <button
               onClick={() => loadData(currentUser)}
-              className="px-4 py-2 text-xs font-semibold bg-red-900 text-white rounded-lg hover:bg-red-800"
+              className="px-4 py-2 text-xs font-bold bg-red-900 text-white rounded-lg hover:bg-red-800 transition-colors"
             >
               Retry Connection
             </button>
@@ -277,39 +314,37 @@ export default function App() {
           <>
             {/* View 1: Dynamic Links Management (Default) */}
             {activeTab === 'links' && (
-              <div className="space-y-8">
-                {/* KPI Metrics & Velocity Strip */}
-                <OverviewStats
-                  overview={overview}
-                  onOpenSimulator={() => {
-                    setSimulatorInitialLinkId(links[0]?.id);
-                    setIsSimulatorOpen(true);
-                  }}
-                  onSelectLink={(id) => {
-                    const l = links.find((item) => item.id === id);
-                    if (l) setActiveAnalyticsLink(l);
-                  }}
-                />
+              <div className="space-y-4 sm:space-y-8">
+                {/* KPI Metrics */}
+                <OverviewStats overview={overview} />
 
-                {/* Primary Dynamic Links Table */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+                {/* Primary Dynamic Links Section with Direct Create Button */}
+                <div className="space-y-3 sm:space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <h2 className="text-base font-bold text-neutral-900">
+                      <h2 className="text-base sm:text-lg font-black tracking-tight text-neutral-950 dark:text-white">
                         {currentUser.role === 'admin' ? 'Dynamic Links & QR Roster' : 'My Dynamic Endpoints'}
                       </h2>
-                      <p className="text-xs text-neutral-500">
+                      <p className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">
                         {currentUser.role === 'admin'
-                          ? 'Manage system short URLs, edit destination targets, and inspect client-assigned QR assets.'
+                          ? 'Manage system short URLs, edit destination targets in real-time, and customize QR codes.'
                           : 'Manage and update destination targets for your registered QR codes in real-time.'}
                       </p>
                     </div>
+
+                    {/* Direct Create Dynamic Link Button */}
+                    <button
+                      onClick={() => setIsCreateOpen(true)}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-neutral-950 dark:bg-indigo-600 hover:bg-neutral-800 dark:hover:bg-indigo-500 rounded-xl transition-colors shadow-xs w-full sm:w-auto"
+                    >
+                      <Plus className="w-4 h-4 stroke-[2.5]" />
+                      <span>+ Create Dynamic Link</span>
+                    </button>
                   </div>
 
                   <LinksTable
                     links={links}
                     onOpenQR={(link) => setActiveQRLink(link)}
-                    onOpenAnalytics={(link) => setActiveAnalyticsLink(link)}
                     onOpenEdit={(link) => setActiveEditLink(link)}
                     onOpenPrint={(link) => {
                       setSelectedPrintLink(link);
@@ -323,20 +358,7 @@ export default function App() {
               </div>
             )}
 
-            {/* View 2: Analytics & Traffic Telemetry */}
-            {activeTab === 'analytics' && (
-              <AnalyticsView
-                overview={overview}
-                links={links}
-                onSelectLinkForAnalytics={(link) => setActiveAnalyticsLink(link)}
-                onOpenSimulator={() => {
-                  setSimulatorInitialLinkId(links[0]?.id);
-                  setIsSimulatorOpen(true);
-                }}
-              />
-            )}
-
-            {/* View 3: Admin-Only Client Approvals */}
+            {/* View 2: Admin-Only Client Approvals */}
             {activeTab === 'clients' && currentUser.role === 'admin' && (
               <ClientApprovalsView
                 clients={clients}
@@ -348,16 +370,16 @@ export default function App() {
               />
             )}
 
-            {/* View 4: Multi-QR Batch Print & Fast Assignment */}
+            {/* View 3: Multi-QR Batch Print & Fast Assignment */}
             {activeTab === 'batch-print' && (
               <BatchPrintPage
                 links={links}
                 onRefreshLinks={() => loadData(currentUser)}
-                onOpenSimulatorForLink={(linkId) => openSimulatorForLink(linkId)}
+                onDeleteLink={handleDeleteLink}
               />
             )}
 
-            {/* View 5: QR Print Center (Single Cards & Display Sheets) */}
+            {/* View 4: QR Print Center (Single Cards & Display Sheets) */}
             {activeTab === 'print' && (
               <QRPrintCenter
                 links={links}
@@ -387,28 +409,7 @@ export default function App() {
         link={activeQRLink}
         isOpen={!!activeQRLink}
         onClose={() => setActiveQRLink(null)}
-        onOpenPrint={(link) => {
-          setSelectedPrintLink(link);
-          setActiveTab('print');
-        }}
-        onOpenSimulator={() => {
-          if (activeQRLink) openSimulatorForLink(activeQRLink.id);
-        }}
-      />
-
-      <LinkAnalyticsModal
-        link={activeAnalyticsLink}
-        isOpen={!!activeAnalyticsLink}
-        onClose={() => setActiveAnalyticsLink(null)}
-        onOpenSimulatorForLink={(linkId) => openSimulatorForLink(linkId)}
-      />
-
-      <ScanSimulatorModal
-        links={links}
-        initialLinkId={simulatorInitialLinkId}
-        isOpen={isSimulatorOpen}
-        onClose={() => setIsSimulatorOpen(false)}
-        onScanRecorded={() => loadData(currentUser)}
+        onDeleteQR={handleDeleteLink}
       />
 
       {/* Floating Notifications */}

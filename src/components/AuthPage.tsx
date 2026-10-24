@@ -125,24 +125,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-100/70 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans">
+    <div className="min-h-screen bg-neutral-100/70 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans transition-colors">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         {/* Brand Icon */}
-        <div className="inline-flex w-12 h-12 rounded-2xl bg-neutral-900 text-white items-center justify-center shadow-md mb-3">
+        <div className="inline-flex w-12 h-12 rounded-2xl bg-neutral-900 dark:bg-neutral-800 text-white items-center justify-center shadow-md mb-3 border border-neutral-800 dark:border-neutral-700">
           <QrCode className="w-6 h-6 text-indigo-400" />
         </div>
-        <h1 className="text-2xl font-black tracking-tight text-neutral-900">
+        <h1 className="text-2xl font-black tracking-tight text-neutral-900 dark:text-white">
           taplocalin
         </h1>
-        <p className="mt-1 text-xs text-neutral-500">
+        <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400 font-medium">
           Dynamic Redirect Links, Smart Buttons & QR Code Platform
         </p>
       </div>
 
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-lg">
-        <div className="bg-white py-8 px-6 shadow-md rounded-2xl border border-neutral-200 sm:px-10 space-y-6">
+        <div className="bg-white dark:bg-neutral-900 py-8 px-6 shadow-md rounded-2xl border border-neutral-200 dark:border-neutral-800 sm:px-10 space-y-6 transition-colors">
           {/* Main Portal Mode Switcher */}
-          <div className="flex p-1 bg-neutral-100 rounded-xl">
+          <div className="flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl">
             <button
               onClick={() => {
                 setTab('admin');

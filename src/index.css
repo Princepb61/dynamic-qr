@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@variant dark (&:where(.dark, .dark *));
+
 @layer base {
   body {
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -23,13 +25,14 @@
     display: none !important;
   }
 
-  #printable-sheet {
+  #printable-sheet, #printable-card, .printable-a4-container {
     box-shadow: none !important;
     border: none !important;
     padding: 0 !important;
-    margin: 0 !important;
+    margin: 0 auto !important;
     width: 100% !important;
-    max-width: 100% !important;
+    max-width: 190mm !important;
+    page-break-inside: avoid !important;
   }
 
   * {
@@ -38,7 +41,8 @@
   }
 
   @page {
-    margin: 0.8cm;
-    size: auto;
+    size: A4 portrait;
+    margin: 10mm;
   }
 }
+

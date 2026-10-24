@@ -7,8 +7,6 @@ import {
   Copy,
   Check,
   ExternalLink,
-  Printer,
-  Sparkles,
   Link as LinkIcon,
   Wifi,
   Phone,
@@ -16,14 +14,15 @@ import {
   Star,
   Coffee,
   Trash2,
+  Printer,
 } from 'lucide-react';
+import { getLast4Letters, downloadA4QRImage } from '../utils/a4QrHelper';
 
 interface QRStudioModalProps {
   link: LinkRecord | null;
   isOpen: boolean;
   onClose: () => void;
   onDeleteQR?: (id: string) => void;
-  onOpenSimulator?: () => void;
 }
 
 const PRESET_COLORS = [
@@ -39,8 +38,7 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
   link,
   isOpen,
   onClose,
-  onOpenPrint,
-  onOpenSimulator,
+  onDeleteQR,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -92,21 +90,66 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
 
   if (!isOpen || !link) return null;
 
+  const [isDownloadingA4, setIsDownloadingA4] = useState(false);
+
+  const handleDownloadA4 = async () => {
+    if (!link) return;
+    try {
+      setIsDownloadingA4(true);
+      await downloadA4QRImage({
+        slug: link.slug,
+        title: link.title,
+        fullUrl: fullRedirectUrl,
+        brandName: 'taplocalin',
+        subcaption: 'Scan with smartphone camera to open',
+      });
+    } catch (err) {
+      console.error('A4 download error:', err);
+    } finally {
+      setIsDownloadingA4(false);
+    }
+  };
+
+  const handlePrintA4 = () => {
+    window.print();
+  };
+
   const handleDownloadPNG = async () => {
     try {
-      const dataUrl = await QRCode.toDataURL(fullRedirectUrl, {
+      const last4 = getLast4Letters(link.slug);
+      // Generate clean simple QR canvas
+      const qrCanvas = document.createElement('canvas');
+      await QRCode.toCanvas(qrCanvas, fullRedirectUrl, {
         width: exportRes,
-        margin,
+        margin: 2,
         color: {
-          dark: colorDark,
-          light: colorLight,
+          dark: '#000000',
+          light: '#ffffff',
         },
-        errorCorrectionLevel: centerIcon !== 'none' ? 'H' : level,
+        errorCorrectionLevel: 'H',
       });
 
+      // Canvas with space underneath for batch code (no outline border)
+      const footerHeight = Math.round(exportRes * 0.14);
+      const outputCanvas = document.createElement('canvas');
+      outputCanvas.width = exportRes;
+      outputCanvas.height = exportRes + footerHeight;
+      const ctx = outputCanvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
+        ctx.drawImage(qrCanvas, 0, 0);
+
+        // Mention ONLY batch code under QR without outline border
+        ctx.fillStyle = '#0f172a';
+        ctx.textAlign = 'center';
+        ctx.font = `bold ${Math.round(exportRes * 0.055)}px ui-monospace, monospace`;
+        ctx.fillText(last4, exportRes / 2, exportRes + Math.round(footerHeight * 0.65));
+      }
+
       const a = document.createElement('a');
-      a.href = dataUrl;
-      a.download = `${link.slug}-qr-${exportRes}px.png`;
+      a.href = outputCanvas.toDataURL('image/png');
+      a.download = `${link.slug}-qr-${last4}.png`;
       a.click();
     } catch (err) {
       console.error('PNG download error:', err);
@@ -160,33 +203,29 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-      <div className="bg-white rounded-2xl max-w-2xl w-full border border-neutral-200 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs">
+      <div className="bg-white dark:bg-neutral-900 rounded-2xl max-w-2xl w-full border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150 transition-colors">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between shrink-0">
           <div>
-            <h3 className="text-base font-bold text-neutral-900">QR Code Studio</h3>
-            <p className="text-xs text-neutral-500 font-mono">Dynamic destination: {link.destinationUrl || '(Unassigned Pre-Printed Stock)'}</p>
+            <h3 className="text-base font-bold text-neutral-900 dark:text-white">QR Code Studio</h3>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 font-mono truncate max-w-[240px] sm:max-w-md">Dynamic destination: {link.destinationUrl || '(Unassigned Pre-Printed Stock)'}</p>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
+            className="p-1 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+        <div className="p-4 sm:p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 items-start">
           {/* Left Column: QR Canvas & Frame Preview */}
           <div className="flex flex-col items-center">
-            {/* Framed QR Code Container */}
+            {/* Clean Borderless QR Code Container */}
             <div
-              className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center shadow-xs ${
-                frameStyle === 'rounded_card'
-                  ? 'border-neutral-900 bg-white shadow-md'
-                  : 'border-neutral-200 bg-white'
-              }`}
+              className="p-3 rounded-2xl transition-all flex flex-col items-center bg-white dark:bg-neutral-800"
               style={{ backgroundColor: colorLight }}
             >
               {frameStyle === 'top_badge' && (
@@ -219,17 +258,24 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
               )}
             </div>
 
+            {/* Mention ONLY the batch code directly under QR (No outline border, no "last 4" label) */}
+            <div className="mt-2 text-center w-full">
+              <span className="text-lg font-mono font-black text-neutral-900 dark:text-white tracking-widest">
+                {getLast4Letters(link.slug)}
+              </span>
+            </div>
+
             {/* Target URL Info */}
             <div className="mt-4 text-center w-full">
-              <div className="text-xs font-semibold text-neutral-900 truncate">{link.title}</div>
-              <div className="mt-1 flex items-center justify-center gap-1.5 text-xs text-neutral-500 font-mono">
+              <div className="text-xs font-bold text-neutral-900 dark:text-white truncate">{link.title}</div>
+              <div className="mt-1 flex items-center justify-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400 font-mono">
                 <span className="truncate max-w-[200px]">{fullRedirectUrl}</span>
                 <button
                   onClick={handleCopyLink}
-                  className="p-1 text-neutral-400 hover:text-neutral-700 transition-colors"
+                  className="p-1 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
                   title="Copy short link"
                 >
-                  {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
               </div>
             </div>
@@ -238,22 +284,23 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
             <div className="mt-4 w-full flex items-center gap-2">
               <button
                 onClick={handleCopyImage}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-medium text-neutral-700 border border-neutral-200 rounded-lg hover:bg-neutral-50 transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-bold text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
               >
-                {copiedImage ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedImage ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copiedImage ? 'Copied PNG!' : 'Copy Image'}</span>
               </button>
               <a
                 href={fullRedirectUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-medium text-neutral-700 border border-neutral-200 rounded-lg hover:bg-neutral-50 transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-bold text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 <span>Test Redirect</span>
               </a>
             </div>
 
+            {/* Prominent Delete QR Code Button */}
             {onDeleteQR && (
               <button
                 onClick={() => {
@@ -262,9 +309,9 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
                     onClose();
                   }
                 }}
-                className="mt-3 w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-200 shadow-2xs"
+                className="mt-3 w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/60 rounded-lg transition-colors border border-red-200 dark:border-red-900 shadow-2xs"
               >
-                <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                <Trash2 className="w-3.5 h-3.5 text-red-500 dark:text-red-400" />
                 <span>Delete QR Code</span>
               </button>
             )}
@@ -272,10 +319,10 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
 
           {/* Right Column: Customization Controls & Export */}
           <div className="space-y-4">
-            {/* FRAME CUSTOMIZER (Signature from PHP-Dynamic-QR) */}
+            {/* FRAME CUSTOMIZER */}
             <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
-                Frame Style (PHP-Dynamic-QR Classic)
+              <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                Frame Style
               </label>
               <div className="grid grid-cols-3 gap-1.5 mb-2">
                 {[
@@ -286,10 +333,10 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
                   <button
                     key={item.id}
                     onClick={() => setFrameStyle(item.id as any)}
-                    className={`py-1.5 px-2 text-xs font-medium rounded-lg border transition-colors ${
+                    className={`py-1.5 px-2 text-xs font-bold rounded-lg border transition-colors ${
                       frameStyle === item.id
-                        ? 'bg-neutral-900 text-white border-neutral-900'
-                        : 'border-neutral-200 text-neutral-700 hover:bg-neutral-50'
+                        ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-950 border-neutral-900 dark:border-white'
+                        : 'border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800'
                     }`}
                   >
                     {item.label}
@@ -303,14 +350,14 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
                   value={frameText}
                   onChange={(e) => setFrameText(e.target.value)}
                   placeholder="SCAN ME"
-                  className="w-full px-3 py-1.5 text-xs font-bold uppercase tracking-wider border border-neutral-300 rounded-lg text-center focus:outline-none focus:border-neutral-900"
+                  className="w-full px-3 py-1.5 text-xs font-bold uppercase tracking-wider border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white rounded-lg text-center focus:outline-none focus:border-neutral-900 dark:focus:border-white"
                 />
               )}
             </div>
 
             {/* CENTER ICON EMBEDDING */}
             <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
+              <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1.5">
                 Center Logo / Icon Badge
               </label>
               <div className="flex flex-wrap gap-1.5">
@@ -326,10 +373,10 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
                   <button
                     key={ic.id}
                     onClick={() => setCenterIcon(ic.id as any)}
-                    className={`py-1 px-2.5 text-xs font-medium rounded-md border transition-colors ${
+                    className={`py-1 px-2.5 text-xs font-bold rounded-md border transition-colors ${
                       centerIcon === ic.id
-                        ? 'bg-neutral-900 text-white border-neutral-900'
-                        : 'border-neutral-200 text-neutral-700 hover:bg-neutral-50'
+                        ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-950 border-neutral-900 dark:border-white'
+                        : 'border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800'
                     }`}
                   >
                     {ic.label}
@@ -340,7 +387,7 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
 
             {/* Foreground Color Swatches */}
             <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
+              <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1.5">
                 Foreground Color
               </label>
               <div className="flex flex-wrap gap-2 mb-2">
@@ -349,8 +396,8 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
                     key={c.hex}
                     onClick={() => setColorDark(c.hex)}
                     style={{ backgroundColor: c.hex }}
-                    className={`w-6 h-6 rounded-full border border-black/10 transition-transform ${
-                      colorDark.toLowerCase() === c.hex.toLowerCase() ? 'scale-125 ring-2 ring-neutral-900 ring-offset-2' : ''
+                    className={`w-6 h-6 rounded-full border border-black/10 dark:border-white/10 transition-transform ${
+                      colorDark.toLowerCase() === c.hex.toLowerCase() ? 'scale-125 ring-2 ring-neutral-900 dark:ring-white ring-offset-2 dark:ring-offset-neutral-900' : ''
                     }`}
                     title={c.name}
                   />
@@ -361,13 +408,13 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
                   type="color"
                   value={colorDark}
                   onChange={(e) => setColorDark(e.target.value)}
-                  className="w-7 h-7 rounded border border-neutral-200 cursor-pointer p-0.5"
+                  className="w-7 h-7 rounded border border-neutral-200 dark:border-neutral-700 cursor-pointer p-0.5 bg-transparent"
                 />
                 <input
                   type="text"
                   value={colorDark}
                   onChange={(e) => setColorDark(e.target.value)}
-                  className="text-xs font-mono px-2 py-1 border border-neutral-300 rounded-lg w-24 uppercase"
+                  className="text-xs font-mono font-bold px-2 py-1 border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white rounded-lg w-24 uppercase"
                 />
               </div>
             </div>
@@ -375,8 +422,8 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
             {/* Quiet Zone Margin */}
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-xs font-semibold text-neutral-700">Quiet Zone Padding</label>
-                <span className="text-xs font-mono text-neutral-500">{margin} blocks</span>
+                <label className="text-xs font-bold text-neutral-700 dark:text-neutral-300">Quiet Zone Padding</label>
+                <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400 font-bold">{margin} blocks</span>
               </div>
               <input
                 type="range"
@@ -385,13 +432,13 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
                 step={1}
                 value={margin}
                 onChange={(e) => setMargin(parseInt(e.target.value, 10))}
-                className="w-full accent-neutral-900 cursor-pointer"
+                className="w-full accent-neutral-900 dark:accent-indigo-500 cursor-pointer"
               />
             </div>
 
             {/* Resolution Selector for PNG */}
             <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">
+              <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
                 PNG Resolution
               </label>
               <div className="grid grid-cols-3 gap-1.5">
@@ -403,10 +450,10 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
                   <button
                     key={item.res}
                     onClick={() => setExportRes(item.res as any)}
-                    className={`py-1 px-2 text-xs font-medium rounded-lg border transition-colors ${
+                    className={`py-1 px-2 text-xs font-bold rounded-lg border transition-colors ${
                       exportRes === item.res
-                        ? 'bg-neutral-900 text-white border-neutral-900'
-                        : 'border-neutral-200 text-neutral-700 hover:bg-neutral-50'
+                        ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-950 border-neutral-900 dark:border-white'
+                        : 'border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800'
                     }`}
                   >
                     {item.label}
@@ -415,22 +462,49 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
               </div>
             </div>
 
-            {/* Download Buttons */}
-            <div className="pt-2 border-t border-neutral-100 flex items-center gap-2">
+            {/* Download & Print Actions */}
+            <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 space-y-2.5">
+              {/* PRIMARY ACTION: Download A4 Size Image */}
               <button
-                onClick={handleDownloadPNG}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-semibold text-white bg-neutral-900 rounded-lg hover:bg-neutral-800 transition-colors shadow-xs"
+                onClick={handleDownloadA4}
+                disabled={isDownloadingA4}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 text-xs font-black uppercase tracking-wider text-white bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] rounded-xl transition-all shadow-sm"
               >
-                <Download className="w-4 h-4" />
-                <span>PNG ({exportRes}px)</span>
+                <Download className="w-4 h-4 stroke-[2.5]" />
+                <span>{isDownloadingA4 ? 'Generating A4 Image...' : 'Download A4 Size Image (Print Ready)'}</span>
               </button>
+              <div className="flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400 px-1 font-medium">
+                <span>Standard A4 (210×297mm · 2480×3508px)</span>
+                <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">Code: {getLast4Letters(link.slug)}</span>
+              </div>
+
+              {/* Direct Print A4 Command Button */}
               <button
-                onClick={handleDownloadSVG}
-                className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-semibold text-neutral-800 bg-neutral-100 rounded-lg hover:bg-neutral-200 transition-colors border border-neutral-200"
+                onClick={handlePrintA4}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-3 text-xs font-bold text-neutral-800 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors border border-neutral-300 dark:border-neutral-700"
               >
-                <Download className="w-4 h-4" />
-                <span>Vector SVG</span>
+                <Printer className="w-3.5 h-3.5" />
+                <span>Command Print (A4 Format)</span>
               </button>
+
+              {/* Secondary Single Asset Downloads */}
+              <div className="pt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  onClick={handleDownloadPNG}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 sm:py-2 px-3 text-xs font-bold text-neutral-700 dark:text-neutral-300 bg-neutral-50 dark:bg-neutral-800/80 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors border border-neutral-200 dark:border-neutral-700 shadow-2xs"
+                  title="Download clean QR PNG with batch code"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Simple PNG ({exportRes}px)</span>
+                </button>
+                <button
+                  onClick={handleDownloadSVG}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 sm:py-2 px-3 text-xs font-bold text-neutral-700 dark:text-neutral-300 bg-neutral-50 dark:bg-neutral-800/80 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors border border-neutral-200 dark:border-neutral-700 shadow-2xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Vector SVG</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

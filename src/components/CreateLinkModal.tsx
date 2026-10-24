@@ -228,27 +228,27 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-      <div className="bg-white rounded-2xl max-w-2xl w-full border border-neutral-200 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs">
+      <div className="bg-white dark:bg-neutral-900 rounded-2xl max-w-2xl w-full border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150 transition-colors">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between shrink-0">
           <div>
-            <h3 className="text-base font-bold text-neutral-900">Create Dynamic QR Code</h3>
-            <p className="text-xs text-neutral-500">
+            <h3 className="text-base font-bold text-neutral-900 dark:text-white">Create Dynamic QR Code</h3>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
               Inspired by PHP-Dynamic-QR: choose content type, customize frame, and update destination anytime.
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
+            className="p-1 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content Type Selector Tabs */}
-        <div className="px-6 pt-4 pb-2 border-b border-neutral-100 bg-neutral-50/50">
-          <label className="block text-[11px] font-bold text-neutral-500 uppercase tracking-wider mb-2">
+        <div className="px-4 sm:px-6 pt-3 pb-2 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-850 shrink-0">
+          <label className="block text-[11px] font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
             Select Dynamic Content Type
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
@@ -281,7 +281,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 flex-1">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-medium">
               {error}
@@ -537,7 +537,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
           </div>
 
           {/* Live Preview Strip */}
-          <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200 flex items-center gap-4">
+          <div className="p-3.5 sm:p-4 bg-neutral-50 dark:bg-neutral-800/50 rounded-xl border border-neutral-200 dark:border-neutral-700 flex flex-col sm:flex-row items-center gap-3 sm:gap-4 text-center sm:text-left">
             {/* Framed QR Preview */}
             <div className="p-2.5 bg-white rounded-xl border-2 border-neutral-900 shadow-2xs flex flex-col items-center shrink-0">
               {frameStyle === 'top_badge' && (
@@ -554,33 +554,33 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
             </div>
 
             <div className="space-y-1 text-xs">
-              <div className="font-semibold text-neutral-900 flex items-center gap-1.5">
+              <div className="font-semibold text-neutral-900 dark:text-white flex items-center justify-center sm:justify-start gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                 <span>Dynamic Short Endpoint</span>
               </div>
-              <div className="text-neutral-500 font-mono text-[11px] truncate">
+              <div className="text-neutral-500 dark:text-neutral-400 font-mono text-[11px] truncate max-w-xs">
                 {previewUrl}
               </div>
-              <p className="text-[11px] text-neutral-400 leading-relaxed">
+              <p className="text-[11px] text-neutral-400 dark:text-neutral-500 leading-relaxed">
                 The printed QR code remains 100% static. Destination content and routing can be changed anytime from the admin panel!
               </p>
             </div>
           </div>
 
           {/* Actions */}
-          <div className="pt-3 border-t border-neutral-100 flex items-center justify-end gap-3">
+          <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800 flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 sm:gap-3">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors"
+              className="w-full sm:w-auto px-4 py-2 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors text-center"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-4 py-2 text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 rounded-lg transition-colors shadow-xs flex items-center gap-1.5"
+              className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 rounded-lg transition-colors shadow-xs flex items-center justify-center gap-1.5"
             >
               {isSubmitting ? 'Generating...' : 'Create Dynamic QR Code'}
             </button>
