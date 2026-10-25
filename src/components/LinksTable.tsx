@@ -165,17 +165,6 @@ export const LinksTable: React.FC<LinksTableProps> = ({
                       <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
                         /r/{link.slug}
                       </span>
-                      <button
-                        onClick={(e) => copyShortUrl(link.slug, e)}
-                        className="p-1 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
-                        title="Copy short URL"
-                      >
-                        {copiedSlug === link.slug ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5" />
-                        )}
-                      </button>
                       <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-bold">
                         {batchCode}
                       </span>
@@ -190,6 +179,25 @@ export const LinksTable: React.FC<LinksTableProps> = ({
                     <span className="text-[10px] text-neutral-500 dark:text-neutral-400 uppercase font-bold">scans</span>
                   </div>
                 </div>
+
+                {/* Mobile: Prominent Permanent Link Copy Button */}
+                <button
+                  type="button"
+                  onClick={(e) => copyShortUrl(link.slug, e)}
+                  className="w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 rounded-xl transition-colors shadow-2xs"
+                >
+                  {copiedSlug === link.slug ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-emerald-700 dark:text-emerald-300 font-black">Copied Permanent Link to Clipboard!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span className="truncate">Copy Permanent Link ({baseUrl}/r/{link.slug})</span>
+                    </>
+                  )}
+                </button>
 
                 {/* Mobile Card Row 2: Target Destination */}
                 <div className="bg-neutral-50 dark:bg-neutral-800/60 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700">
@@ -318,17 +326,24 @@ export const LinksTable: React.FC<LinksTableProps> = ({
                       <div className="mt-1 flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400 font-mono">
                         <span className="font-bold text-indigo-600 dark:text-indigo-400">/r/{link.slug}</span>
                         <button
+                          type="button"
                           onClick={(e) => copyShortUrl(link.slug, e)}
-                          className="p-1 hover:text-neutral-900 dark:hover:text-neutral-100 rounded transition-colors"
-                          title="Copy dynamic short URL"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 border border-indigo-200 dark:border-indigo-800 rounded transition-colors"
+                          title={`Copy permanent redirect URL: ${fullRedirectUrl}`}
                         >
                           {copiedSlug === link.slug ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <>
+                              <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                              <span className="text-emerald-700 dark:text-emerald-300">Copied!</span>
+                            </>
                           ) : (
-                            <Copy className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500" />
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span>Copy Link</span>
+                            </>
                           )}
                         </button>
-                        <span className="text-[10px] font-mono font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 px-1 rounded">
+                        <span className="text-[10px] font-mono font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 px-1.5 py-0.5 rounded">
                           {batchCode}
                         </span>
                       </div>

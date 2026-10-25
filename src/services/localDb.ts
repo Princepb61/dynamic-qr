@@ -223,89 +223,51 @@ export const localDb = {
   loadDb,
   saveDb,
 
-  async login(payload: { email: string; password: string; portalType?: 'admin' | 'client' }): Promise<{ token: string; user: UserRecord }> {
+  async login(payload: { email: string; password: string; portalType?: string }): Promise<{ token: string; user: UserRecord }> {
     const db = loadDb();
-    const user = db.users.find((u) => u.email.toLowerCase() === payload.email.toLowerCase().trim());
+    const cleanEmail = payload.email.toLowerCase().trim();
+    const user = db.users.find((u) => u.email.toLowerCase() === cleanEmail);
     if (!user || user.password !== payload.password) {
       throw new Error('Invalid email or password credentials.');
-    }
-    if (payload.portalType === 'admin' && user.role !== 'admin') {
-      throw new Error('This account does not have administrator privileges.');
-    }
-    if (user.status === 'pending') {
-      const err: any = new Error('Your client account is pending administrator approval.');
-      err.code = 'ACCOUNT_PENDING_APPROVAL';
-      err.user = user;
-      throw err;
-    }
-    if (user.status === 'rejected') {
-      throw new Error('Your client account application was declined.');
     }
     const { password, ...safeUser } = user;
     return { token: `local_token_${user.id}`, user: safeUser };
   },
 
-  async registerClient(payload: { name: string; email: string; password: string; company?: string }) {
+  exportBackup() {
     const db = loadDb();
-    const existing = db.users.find((u) => u.email.toLowerCase() === payload.email.toLowerCase().trim());
-    if (existing) {
-      throw new Error('An account with this email address already exists.');
-    }
-    const newUser: StoredUser = {
-      id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      name: payload.name.trim(),
-      email: payload.email.toLowerCase().trim(),
-      password: payload.password,
-      role: 'client',
-      status: 'pending',
-      company: payload.company?.trim(),
-      createdAt: new Date().toISOString(),
-    };
-    db.users.push(newUser);
-    saveDb(db);
-    const { password, ...safeUser } = newUser;
     return {
-      message: 'Account registered successfully. Awaiting admin approval.',
-      user: safeUser,
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      links: db.links,
+      clicksCount: db.clicks.length,
     };
   },
 
-  async getClients(): Promise<{ clients: ClientAccount[]; pendingCount: number; approvedCount: number }> {
-    const db = loadDb();
-    const clients: ClientAccount[] = db.users
-      .filter((u) => u.role === 'client')
-      .map((u) => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        role: 'client' as const,
-        company: u.company || 'Direct Client',
-        status: u.status,
-        createdAt: u.createdAt,
-        approvedAt: u.approvedAt,
-        linkCount: db.links.filter((l) => l.ownerId === u.id).length,
-        totalScans: db.links.filter((l) => l.ownerId === u.id).reduce((sum, l) => sum + (l.totalClicks || 0), 0),
-      }));
-    const pendingCount = clients.filter((c) => c.status === 'pending').length;
-    const approvedCount = clients.filter((c) => c.status === 'approved').length;
-    return { clients, pendingCount, approvedCount };
-  },
-
-  async updateClientStatus(id: string, status: 'approved' | 'rejected' | 'pending') {
-    const db = loadDb();
-    const client = db.users.find((u) => u.id === id);
-    if (!client) throw new Error('Client not found');
-    client.status = status;
-    if (status === 'approved') client.approvedAt = new Date().toISOString();
-    saveDb(db);
-    return { success: true, message: `Client status updated to ${status}`, client };
-  },
-
-  async deleteClient(id: string) {
-    const db = loadDb();
-    db.users = db.users.filter((u) => u.id !== id);
-    saveDb(db);
-    return true;
+  importBackup(backupData: any): { success: boolean; count: number; error?: string } {
+    try {
+      if (!backupData || !Array.isArray(backupData.links)) {
+        return { success: false, count: 0, error: 'File is not a valid taplocalin backup JSON.' };
+      }
+      const db = loadDb();
+      const existingIds = new Set(db.links.map((l) => l.id));
+      let importedCount = 0;
+      for (const item of backupData.links) {
+        if (!item.slug) continue;
+        if (existingIds.has(item.id)) {
+          const idx = db.links.findIndex((l) => l.id === item.id);
+          if (idx !== -1) db.links[idx] = item;
+        } else {
+          db.links.unshift(item);
+          existingIds.add(item.id);
+        }
+        importedCount++;
+      }
+      saveDb(db);
+      return { success: true, count: importedCount };
+    } catch (e: any) {
+      return { success: false, count: 0, error: e.message || 'Import error' };
+    }
   },
 
   async getLinks(ownerId?: string) {
@@ -408,9 +370,10 @@ export const localDb = {
     return { success: true, batchId, batchName: payload.batchName, count, links: newLinks };
   },
 
-  async assignBatchLink(id: string, payload: { destinationUrl: string; title?: string }) {
+  async assignBatchLink(idOrSlug: string, payload: { destinationUrl: string; title?: string }) {
     const db = loadDb();
-    const link = db.links.find((l) => l.id === id);
+    const clean = idOrSlug.trim().toLowerCase().replace('/r/', '').replace('/', '');
+    const link = db.links.find((l) => l.id === idOrSlug || l.slug.toLowerCase() === clean);
     if (!link) throw new Error('QR code not found');
     link.destinationUrl = payload.destinationUrl;
     if (payload.title) link.title = payload.title;

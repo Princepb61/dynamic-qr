@@ -42,58 +42,6 @@ export const api = {
     return localDb.login(payload);
   },
 
-  async registerClient(payload: { name: string; email: string; password: string; company?: string }): Promise<{ message: string; user: UserRecord }> {
-    try {
-      const res = await fetch('/api/auth/register-client', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await parseJsonResponse(res);
-      if (data !== null) {
-        if (!res.ok) throw new Error(data.error || 'Registration failed');
-        return data;
-      }
-    } catch (err: any) {
-      if (err.message && !err.message.includes('fetch')) throw err;
-    }
-    return localDb.registerClient(payload);
-  },
-
-  // Admin Client Approval & Management
-  async getClients(): Promise<{ clients: ClientAccount[]; pendingCount: number; approvedCount: number }> {
-    try {
-      const res = await fetch('/api/admin/clients');
-      const data = await parseJsonResponse(res);
-      if (data !== null && res.ok) return data;
-    } catch {}
-    return localDb.getClients();
-  },
-
-  async updateClientStatus(id: string, status: 'approved' | 'rejected' | 'pending'): Promise<{ success: boolean; message: string; client: any }> {
-    try {
-      const res = await fetch(`/api/admin/clients/${id}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      const data = await parseJsonResponse(res);
-      if (data !== null && res.ok) return data;
-    } catch {}
-    return localDb.updateClientStatus(id, status);
-  },
-
-  async deleteClient(id: string): Promise<boolean> {
-    try {
-      const res = await fetch(`/api/admin/clients/${id}`, {
-        method: 'DELETE',
-      });
-      const data = await parseJsonResponse(res);
-      if (data !== null && res.ok) return true;
-    } catch {}
-    return localDb.deleteClient(id);
-  },
-
   // Batch QR Operations
   async generateBatch(payload: {
     batchName: string;

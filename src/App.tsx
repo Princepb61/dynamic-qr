@@ -6,12 +6,12 @@ import { CreateLinkModal } from './components/CreateLinkModal';
 import { EditDestinationModal } from './components/EditDestinationModal';
 import { QRStudioModal } from './components/QRStudioModal';
 import { QRPrintCenter } from './components/QRPrintCenter';
-import { ClientApprovalsView } from './components/ClientApprovalsView';
 import { BatchPrintPage } from './components/BatchPrintPage';
 import { AuthPage } from './components/AuthPage';
 import { ClientRedirectHandler } from './components/ClientRedirectHandler';
+import { ProfileBackupModal } from './components/ProfileBackupModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
-import { LinkRecord, GlobalOverview, UserRecord, ClientAccount } from './types';
+import { LinkRecord, GlobalOverview, UserRecord } from './types';
 import { api } from './services/api';
 import { RefreshCw, Plus } from 'lucide-react';
 
@@ -53,7 +53,7 @@ export default function App() {
     }
   });
 
-  const [activeTab, setActiveTab] = useState<'links' | 'clients' | 'batch-print' | 'print'>('links');
+  const [activeTab, setActiveTab] = useState<'links' | 'batch-print' | 'print'>('links');
   // Dynamic redirect slug detection for Netlify SPA deployments
   const [redirectSlug] = useState<string | null>(() => {
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/r/')) {
@@ -64,12 +64,12 @@ export default function App() {
   });
   const [links, setLinks] = useState<LinkRecord[]>([]);
   const [overview, setOverview] = useState<GlobalOverview | null>(null);
-  const [clients, setClients] = useState<ClientAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [activeQRLink, setActiveQRLink] = useState<LinkRecord | null>(null);
   const [activeEditLink, setActiveEditLink] = useState<LinkRecord | null>(null);
   const [selectedPrintLink, setSelectedPrintLink] = useState<LinkRecord | null>(null);
@@ -96,21 +96,13 @@ export default function App() {
       setLoading(true);
       setError(null);
 
-      const ownerId = user.role === 'client' ? user.id : undefined;
-
       const [linksData, overviewData] = await Promise.all([
-        api.getLinks(ownerId),
-        api.getOverview(ownerId),
+        api.getLinks(),
+        api.getOverview(),
       ]);
 
       setLinks(linksData.links);
       setOverview(overviewData);
-
-      // If admin, load clients for approval queue
-      if (user.role === 'admin') {
-        const clientRes = await api.getClients();
-        setClients(clientRes.clients);
-      }
     } catch (err: any) {
       console.error('Data loading error:', err);
       setError(err.message || 'Failed to connect to backend server');
@@ -132,17 +124,18 @@ export default function App() {
     setActiveTab('links');
     addToast(
       'success',
-      `Welcome, ${user.name}! Signed in as ${user.role === 'admin' ? 'Administrator' : 'Client'}.`
+      `Welcome back, ${user.name}! Administrator session active.`
     );
   };
 
   const handleLogout = () => {
+    // Only remove user session tokens so database is safe in local storage
     localStorage.removeItem('dynamicqr_user');
     localStorage.removeItem('dynamicqr_token');
     setCurrentUser(null);
     setLinks([]);
     setOverview(null);
-    setClients([]);
+    setIsProfileModalOpen(false);
   };
 
   const handleCreateLink = async (payload: any) => {
@@ -215,46 +208,12 @@ export default function App() {
     }
   };
 
-  // Client Approval Handlers
-  const handleApproveClient = async (id: string) => {
-    try {
-      const res = await api.updateClientStatus(id, 'approved');
-      addToast('success', res.message);
-      const clientRes = await api.getClients();
-      setClients(clientRes.clients);
-    } catch (err: any) {
-      addToast('error', err.message || 'Failed to approve client');
-    }
-  };
-
-  const handleRejectClient = async (id: string) => {
-    try {
-      const res = await api.updateClientStatus(id, 'rejected');
-      addToast('info', res.message);
-      const clientRes = await api.getClients();
-      setClients(clientRes.clients);
-    } catch (err: any) {
-      addToast('error', err.message || 'Failed to update client status');
-    }
-  };
-
-  const handleDeleteClient = async (id: string) => {
-    try {
-      await api.deleteClient(id);
-      addToast('info', 'Client account removed.');
-      const clientRes = await api.getClients();
-      setClients(clientRes.clients);
-    } catch (err: any) {
-      addToast('error', err.message || 'Failed to delete client');
-    }
-  };
-
   // Handle direct dynamic link scan / redirection on Netlify SPA
   if (redirectSlug) {
     return <ClientRedirectHandler slug={redirectSlug} />;
   }
 
-  // If not logged in, render the Authentication & Client Portal page
+  // If not logged in, render the Administrator Sign-In page (Zero exposed credentials)
   if (!currentUser) {
     return (
       <div className={darkMode ? 'dark' : ''}>
@@ -275,7 +234,6 @@ export default function App() {
     );
   }
 
-  const pendingClientsCount = clients.filter((c) => c.status === 'pending').length;
   const unassignedCount = links.filter((l) => l.isAssigned === false || !l.destinationUrl || l.destinationUrl.trim() === '').length;
 
   return (
@@ -285,11 +243,11 @@ export default function App() {
         user={currentUser}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        pendingClientsCount={pendingClientsCount}
         unassignedCount={unassignedCount}
         darkMode={darkMode}
         onToggleDarkMode={toggleDarkMode}
         onLogout={handleLogout}
+        onOpenProfileModal={() => setIsProfileModalOpen(true)}
       />
 
       {/* Main Container - Mobile Optimized Padding */}
@@ -323,12 +281,10 @@ export default function App() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <h2 className="text-base sm:text-lg font-black tracking-tight text-neutral-950 dark:text-white">
-                        {currentUser.role === 'admin' ? 'Dynamic Links & QR Roster' : 'My Dynamic Endpoints'}
+                        Dynamic Links &amp; QR Roster
                       </h2>
                       <p className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">
-                        {currentUser.role === 'admin'
-                          ? 'Manage system short URLs, edit destination targets in real-time, and customize QR codes.'
-                          : 'Manage and update destination targets for your registered QR codes in real-time.'}
+                        Manage system short URLs, edit destination targets in real-time, and customize QR codes.
                       </p>
                     </div>
 
@@ -358,19 +314,7 @@ export default function App() {
               </div>
             )}
 
-            {/* View 2: Admin-Only Client Approvals */}
-            {activeTab === 'clients' && currentUser.role === 'admin' && (
-              <ClientApprovalsView
-                clients={clients}
-                loading={loading}
-                onApproveClient={handleApproveClient}
-                onRejectClient={handleRejectClient}
-                onDeleteClient={handleDeleteClient}
-                onRefresh={() => loadData(currentUser)}
-              />
-            )}
-
-            {/* View 3: Multi-QR Batch Print & Fast Assignment */}
+            {/* View 2: Multi-QR Batch Print & Fast Assignment */}
             {activeTab === 'batch-print' && (
               <BatchPrintPage
                 links={links}
@@ -379,7 +323,7 @@ export default function App() {
               />
             )}
 
-            {/* View 4: QR Print Center (Single Cards & Display Sheets) */}
+            {/* View 3: QR Print Center (Single Cards & Display Sheets) */}
             {activeTab === 'print' && (
               <QRPrintCenter
                 links={links}
@@ -410,6 +354,17 @@ export default function App() {
         isOpen={!!activeQRLink}
         onClose={() => setActiveQRLink(null)}
         onDeleteQR={handleDeleteLink}
+      />
+
+      {/* Admin Profile & Data Backup Modal */}
+      <ProfileBackupModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        currentUser={currentUser}
+        links={links}
+        onLogout={handleLogout}
+        onRefreshData={() => loadData(currentUser)}
+        onAddToast={addToast}
       />
 
       {/* Floating Notifications */}
