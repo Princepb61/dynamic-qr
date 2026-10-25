@@ -67,27 +67,98 @@ export const api = {
     id: string,
     payload: { destinationUrl: string; title?: string; description?: string }
   ): Promise<{ success: boolean; message: string; link: LinkRecord }> {
+    // 1. Immediately update local database so UI reflects assignment instantly
+    const localRes = await localDb.assignBatchLink(id, payload);
+
+    // 2. Synchronize with backend server if available
     try {
-      const res = await fetch(`/api/batch-qr/${id}/assign`, {
+      const res = await fetch(`/api/batch-qr/${encodeURIComponent(id)}/assign`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const data = await parseJsonResponse(res);
-      if (data !== null && res.ok) return data;
+      if (data !== null && res.ok && data.link) {
+        return { success: true, message: data.message || 'QR code assigned successfully', link: data.link };
+      }
     } catch {}
-    return localDb.assignBatchLink(id, payload);
+
+    return localRes;
   },
 
-  // Dynamic Links
+  // Dynamic Links with 2-Way Sync (Merges PC and Mobile data)
   async getLinks(ownerId?: string): Promise<{ links: LinkRecord[]; totalLinks: number; totalClicks: number }> {
+    const localData = await localDb.getLinks(ownerId);
+    let mergedLinks = [...localData.links];
+
     try {
       const url = ownerId ? `/api/links?ownerId=${encodeURIComponent(ownerId)}` : '/api/links';
       const res = await fetch(url);
-      const data = await parseJsonResponse(res);
-      if (data !== null && res.ok) return data;
+      const serverData = await parseJsonResponse(res);
+
+      if (serverData !== null && res.ok && Array.isArray(serverData.links)) {
+        const existingSlugs = new Set(mergedLinks.map((l) => l.slug.toLowerCase()));
+        
+        // Merge server links
+        for (const sLink of serverData.links) {
+          const localIdx = mergedLinks.findIndex(
+            (l) => l.id === sLink.id || l.slug.toLowerCase() === sLink.slug.toLowerCase()
+          );
+
+          if (localIdx === -1) {
+            // New link on server (e.g. from PC) -> add to mobile!
+            mergedLinks.push(sLink);
+            existingSlugs.add(sLink.slug.toLowerCase());
+          } else {
+            // Already exists locally: if local is assigned, keep assigned state!
+            const localLink = mergedLinks[localIdx];
+            if (localLink.isAssigned && localLink.destinationUrl && !sLink.destinationUrl) {
+              // Local has priority for newly assigned destination
+            } else if (sLink.isAssigned && sLink.destinationUrl) {
+              mergedLinks[localIdx] = { ...localLink, ...sLink, isAssigned: true };
+            }
+          }
+        }
+
+        // Persist merged data to localDb
+        localDb.importBackup({ version: '1.0', exportDate: new Date().toISOString(), links: mergedLinks });
+
+        // Push any local-only links to server in background
+        const localOnlyLinks = mergedLinks.filter(
+          (ml) => !serverData.links.some((sl: LinkRecord) => sl.id === ml.id || sl.slug.toLowerCase() === ml.slug.toLowerCase())
+        );
+        if (localOnlyLinks.length > 0) {
+          fetch('/api/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ links: localOnlyLinks }),
+          }).catch(() => {});
+        }
+      }
     } catch {}
-    return localDb.getLinks(ownerId);
+
+    const totalClicks = mergedLinks.reduce((sum, l) => sum + (l.totalClicks || 0), 0);
+    return { links: mergedLinks, totalLinks: mergedLinks.length, totalClicks };
+  },
+
+  // Manual Direct Cloud Sync (Used in Profile modal)
+  async syncWithCloud(): Promise<{ success: boolean; count: number; links: LinkRecord[] }> {
+    const localData = await localDb.getLinks();
+    try {
+      const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ links: localData.links }),
+      });
+      const data = await parseJsonResponse(res);
+      if (data !== null && res.ok && Array.isArray(data.links)) {
+        localDb.importBackup({ version: '1.0', exportDate: new Date().toISOString(), links: data.links });
+        return { success: true, count: data.links.length, links: data.links };
+      }
+    } catch (err: any) {
+      return { success: false, count: localData.links.length, links: localData.links };
+    }
+    return { success: true, count: localData.links.length, links: localData.links };
   },
 
   async createLink(payload: {

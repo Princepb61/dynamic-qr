@@ -19,6 +19,8 @@ import {
   SlidersHorizontal,
   Trash2,
   Download,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { getLast4Letters } from '../utils/a4QrHelper';
 
@@ -58,20 +60,35 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
 
   // Quick Code Lookup / Scan
   const [lookupSlug, setLookupSlug] = useState('');
+  const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
-  // Filter batch / stock links (pre-printed or unassigned)
-  const stockLinks = links.filter((l) => l.isAssigned === false || l.tags?.includes('Pre-Printed') || l.tags?.includes('Batch Stock'));
-  const unassignedCount = stockLinks.filter((l) => l.isAssigned === false || !l.destinationUrl).length;
-  const assignedCount = stockLinks.length - unassignedCount;
+  const handleCopyPermanentLink = (slug: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const url = `${baseUrl}/r/${slug}`;
+    navigator.clipboard.writeText(url);
+    setCopiedSlug(slug);
+    setTimeout(() => setCopiedSlug(null), 2000);
+  };
 
-  // Initial setup: use stock links if available for print preview
+  // Filter batch / stock links (pre-printed or unassigned)
+  const stockLinks = links.filter((l) => l.isAssigned === false || !l.destinationUrl || l.tags?.includes('Pre-Printed') || l.tags?.includes('Batch Stock'));
+  const unassignedCount = links.filter((l) => l.isAssigned === false || !l.destinationUrl || l.destinationUrl.trim() === '').length;
+  const assignedCount = links.length - unassignedCount;
+
+  // Sync batch links whenever links updates
   useEffect(() => {
-    if (generatedBatchLinks.length === 0 && stockLinks.length > 0) {
-      setGeneratedBatchLinks(stockLinks.slice(0, 12));
+    if (stockLinks.length > 0) {
+      setGeneratedBatchLinks((prev) => {
+        if (prev.length === 0) return stockLinks.slice(0, 12);
+        return prev.map((item) => {
+          const fresh = links.find((l) => l.id === item.id || l.slug.toLowerCase() === item.slug.toLowerCase());
+          return fresh ? { ...item, ...fresh } : item;
+        });
+      });
     }
-  }, [stockLinks]);
+  }, [links]);
 
   // Handle generating a new batch of pre-printed QR codes
   const handleGenerateBatch = async () => {
@@ -116,10 +133,22 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
     try {
       setIsSavingAssignment(true);
       setAssignError(null);
-      await api.assignBatchLink(assigningLink.id, {
+      await api.assignBatchLink(assigningLink.slug, {
         destinationUrl: target,
         title: assignTitle.trim() || assigningLink.title,
       });
+
+      const updatedLink: LinkRecord = {
+        ...assigningLink,
+        destinationUrl: target,
+        title: assignTitle.trim() || assigningLink.title,
+        isAssigned: true,
+      };
+
+      setAssigningLink(updatedLink);
+      setGeneratedBatchLinks((prev) =>
+        prev.map((l) => (l.id === assigningLink.id || l.slug === assigningLink.slug ? updatedLink : l))
+      );
 
       setAssignSuccess(`QR code /r/${assigningLink.slug} is now linked! Next scan will route to: ${target}`);
       await onRefreshLinks();
@@ -128,7 +157,7 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
         setAssignSuccess(null);
         setDestinationUrl('');
         setAssignTitle('');
-      }, 1800);
+      }, 1500);
     } catch (err: any) {
       setAssignError(err.message || 'Failed to assign destination');
     } finally {
@@ -382,6 +411,27 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                       </span>
                     </div>
 
+                    {/* Copy Permanent Link button under QR */}
+                    <div className="my-1 w-full print:hidden">
+                      <button
+                        type="button"
+                        onClick={(e) => handleCopyPermanentLink(link.slug, e)}
+                        className="w-full flex items-center justify-center gap-1.5 py-1 px-2 text-[10px] font-bold text-neutral-800 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 rounded-lg transition-colors"
+                      >
+                        {copiedSlug === link.slug ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-600" />
+                            <span className="text-emerald-700 font-bold">Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3 text-indigo-600" />
+                            <span>Copy Permanent Link</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
                     {/* Bottom Slug & Cut Indicator */}
                     <div className="w-full mt-1.5 pt-1.5 border-t border-neutral-100">
                       <div className="text-xs font-bold text-neutral-900 truncate">
@@ -569,6 +619,25 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                         </div>
                       </div>
 
+                      {/* Copy Permanent Link button on mobile card */}
+                      <button
+                        type="button"
+                        onClick={(e) => handleCopyPermanentLink(link.slug, e)}
+                        className="w-full flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-bold text-neutral-800 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 rounded-lg transition-colors"
+                      >
+                        {copiedSlug === link.slug ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-emerald-700 font-bold">Permanent Link Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>Copy Permanent Link (/r/{link.slug})</span>
+                          </>
+                        )}
+                      </button>
+
                       <div className="flex items-center gap-2 pt-1">
                         <button
                           onClick={() => {
@@ -674,6 +743,24 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
 
                           <td className="px-5 py-3.5 text-right font-sans">
                             <div className="inline-flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={(e) => handleCopyPermanentLink(link.slug, e)}
+                                className="px-2.5 py-1.5 text-xs font-bold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 rounded-lg transition-colors inline-flex items-center gap-1.5"
+                                title="Copy permanent link"
+                              >
+                                {copiedSlug === link.slug ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span className="text-emerald-700">Copied!</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3.5 h-3.5 text-neutral-600" />
+                                    <span>Copy Link</span>
+                                  </>
+                                )}
+                              </button>
                               <button
                                 onClick={() => {
                                   setAssigningLink(link);

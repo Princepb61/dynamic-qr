@@ -373,12 +373,39 @@ export const localDb = {
   async assignBatchLink(idOrSlug: string, payload: { destinationUrl: string; title?: string }) {
     const db = loadDb();
     const clean = idOrSlug.trim().toLowerCase().replace('/r/', '').replace('/', '');
-    const link = db.links.find((l) => l.id === idOrSlug || l.slug.toLowerCase() === clean);
-    if (!link) throw new Error('QR code not found');
-    link.destinationUrl = payload.destinationUrl;
-    if (payload.title) link.title = payload.title;
-    link.isAssigned = true;
-    link.updatedAt = new Date().toISOString();
+    let link = db.links.find((l) => l.id === idOrSlug || l.slug.toLowerCase() === clean);
+
+    if (!link) {
+      link = {
+        id: `link_${clean}_${Date.now()}`,
+        slug: clean,
+        title: payload.title || `QR Code (${clean})`,
+        destinationUrl: payload.destinationUrl,
+        description: 'Assigned via mobile scan',
+        isActive: true,
+        isAssigned: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tags: ['Pre-Printed', 'Assigned'],
+        totalClicks: 0,
+        ownerId: 'usr_admin_1',
+        ownerEmail: 'p0667500@gmail.com',
+        ownerName: 'Administrator',
+        qrSettings: {
+          colorDark: '#000000',
+          colorLight: '#ffffff',
+          errorCorrectionLevel: 'H',
+          margin: 2,
+        },
+      };
+      db.links.unshift(link);
+    } else {
+      link.destinationUrl = payload.destinationUrl;
+      if (payload.title) link.title = payload.title;
+      link.isAssigned = true;
+      link.updatedAt = new Date().toISOString();
+    }
+
     saveDb(db);
     return { success: true, message: 'QR code assigned successfully', link };
   },

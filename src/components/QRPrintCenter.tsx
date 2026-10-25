@@ -23,11 +23,19 @@ export const QRPrintCenter: React.FC<QRPrintCenterProps> = ({
   const [brandName, setBrandName] = useState('taplocalin');
   const [callToAction, setCallToAction] = useState('Point camera at the code below to open');
   const [isDownloadingA4, setIsDownloadingA4] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const fullRedirectUrl = currentLink ? `${baseUrl}/r/${currentLink.slug}` : '';
+
+  const handleCopyLink = () => {
+    if (!fullRedirectUrl) return;
+    navigator.clipboard.writeText(fullRedirectUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
 
   useEffect(() => {
     if (!currentLink || !canvasRef.current) return;
@@ -259,6 +267,18 @@ export const QRPrintCenter: React.FC<QRPrintCenterProps> = ({
                 <div className="text-3xl font-mono font-black text-neutral-950 tracking-widest">
                   {getLast4Letters(currentLink.slug)}
                 </div>
+              </div>
+
+              {/* Copy Permanent Link button under QR */}
+              <div className="mt-3 w-full max-w-xs print:hidden">
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold text-neutral-800 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 rounded-lg transition-colors shadow-2xs"
+                >
+                  {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-indigo-600" />}
+                  <span>{copiedLink ? 'Copied Permanent Link!' : 'Copy Permanent Link'}</span>
+                </button>
               </div>
             </div>
 

@@ -265,6 +265,17 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
               </span>
             </div>
 
+            {/* COPY PERMANENT LINK BUTTON DIRECTLY UNDER THE QR */}
+            <div className="mt-3 w-full">
+              <button
+                onClick={handleCopyLink}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all shadow-xs active:scale-[0.98]"
+              >
+                {copiedLink ? <Check className="w-4 h-4 text-white" /> : <Copy className="w-4 h-4 text-white" />}
+                <span>{copiedLink ? 'Copied Permanent Link!' : 'Copy Permanent Link'}</span>
+              </button>
+            </div>
+
             {/* Target URL Info */}
             <div className="mt-4 text-center w-full">
               <div className="text-xs font-bold text-neutral-900 dark:text-white truncate">{link.title}</div>

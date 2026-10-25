@@ -121,6 +121,17 @@ export default function App() {
     localStorage.setItem('dynamicqr_user', JSON.stringify(user));
     localStorage.setItem('dynamicqr_token', token);
     setCurrentUser(user);
+
+    // If user arrived from scanning an unassigned QR code, return straight to its assign screen!
+    try {
+      const pendingSlug = sessionStorage.getItem('pending_assign_slug');
+      if (pendingSlug) {
+        sessionStorage.removeItem('pending_assign_slug');
+        window.location.href = `/r/${pendingSlug}`;
+        return;
+      }
+    } catch {}
+
     setActiveTab('links');
     addToast(
       'success',

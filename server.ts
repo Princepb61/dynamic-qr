@@ -403,6 +403,17 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Enable CORS for all incoming requests (enables Netlify & mobile cross-origin access)
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   // -------------------------------------------------------------
   // DYNAMIC REDIRECT ENGINE (/r/:slug)
   // -------------------------------------------------------------
@@ -507,7 +518,7 @@ async function startServer() {
 
               <div>
                 <label class="block text-xs font-semibold text-neutral-300 mb-1">Admin Verification Password</label>
-                <input type="password" id="adminPass" placeholder="Enter P4prince.com" required class="w-full px-3.5 py-2 text-xs bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-indigo-500">
+                <input type="password" id="adminPass" placeholder="Enter Admin Password" required class="w-full px-3.5 py-2 text-xs bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-indigo-500">
               </div>
 
               <div id="statusMsg" class="hidden p-2.5 rounded-lg text-xs"></div>
@@ -1048,7 +1059,7 @@ async function startServer() {
     res.json({ success: true, message: 'QR Code linked and activated!', link });
   });
 
-  // 3. Assign Link via Admin Panel
+  // 3. Assign Link via Admin Panel or Scan
   app.put('/api/batch-qr/:id/assign', (req: Request, res: Response) => {
     const { id } = req.params;
     let { destinationUrl, title, description } = req.body;
@@ -1069,21 +1080,71 @@ async function startServer() {
     }
 
     const db = loadDatabase();
-    const link = db.links.find((l) => l.id === id);
+    const cleanKey = id.trim().toLowerCase().replace('/r/', '').replace('/', '');
+    let link = db.links.find((l) => l.id === id || l.slug.toLowerCase() === cleanKey);
 
     if (!link) {
-      return res.status(404).json({ error: 'QR Code not found.' });
+      // Auto-create/upsert link if created on client or scanned fresh
+      link = {
+        id: `link_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        slug: cleanKey,
+        title: title?.trim() || `QR Code (${cleanKey})`,
+        destinationUrl,
+        description: description?.trim() || 'Assigned via mobile scan',
+        isActive: true,
+        isAssigned: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tags: ['Assigned', 'Mobile Scan'],
+        totalClicks: 0,
+        ownerId: 'usr_admin_1',
+        ownerEmail: 'p0667500@gmail.com',
+        ownerName: 'System Administrator',
+      };
+      db.links.unshift(link);
+    } else {
+      link.destinationUrl = destinationUrl;
+      link.isAssigned = true;
+      link.isActive = true;
+      if (title && title.trim()) link.title = title.trim();
+      if (description && description.trim()) link.description = description.trim();
+      link.updatedAt = new Date().toISOString();
     }
-
-    link.destinationUrl = destinationUrl;
-    link.isAssigned = true;
-    link.isActive = true;
-    if (title && title.trim()) link.title = title.trim();
-    if (description && description.trim()) link.description = description.trim();
-    link.updatedAt = new Date().toISOString();
 
     saveDatabase(db);
     res.json({ success: true, message: `QR Code /r/${link.slug} is now linked and active!`, link });
+  });
+
+  // 4. Two-Way Device Synchronization Endpoint (Syncs PC & Phone)
+  app.post('/api/sync', (req: Request, res: Response) => {
+    const { links: clientLinks } = req.body;
+    const db = loadDatabase();
+
+    if (Array.isArray(clientLinks)) {
+      clientLinks.forEach((cLink: LinkRecord) => {
+        if (!cLink || !cLink.slug) return;
+        const existingIdx = db.links.findIndex((l) => l.id === cLink.id || l.slug.toLowerCase() === cLink.slug.toLowerCase());
+        if (existingIdx !== -1) {
+          // Keep newest updatedAt or preserve assignment
+          const serverItem = db.links[existingIdx];
+          const serverTime = new Date(serverItem.updatedAt || 0).getTime();
+          const clientTime = new Date(cLink.updatedAt || 0).getTime();
+          if (clientTime >= serverTime || (cLink.isAssigned && !serverItem.isAssigned)) {
+            db.links[existingIdx] = { ...serverItem, ...cLink, isAssigned: true };
+          }
+        } else {
+          db.links.unshift(cLink);
+        }
+      });
+      saveDatabase(db);
+    }
+
+    res.json({
+      success: true,
+      links: db.links,
+      count: db.links.length,
+      timestamp: new Date().toISOString(),
+    });
   });
 
   // -------------------------------------------------------------

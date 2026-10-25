@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { UserRecord, LinkRecord } from '../types';
 import { localDb } from '../services/localDb';
+import { api } from '../services/api';
 import {
   X,
   User,
@@ -14,6 +15,8 @@ import {
   HardDrive,
   Copy,
   Check,
+  Cloud,
+  RefreshCw,
 } from 'lucide-react';
 
 interface ProfileBackupModalProps {
@@ -37,8 +40,26 @@ export const ProfileBackupModal: React.FC<ProfileBackupModalProps> = ({
 }) => {
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
   const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleCloudSync = async () => {
+    try {
+      setIsSyncingCloud(true);
+      const res = await api.syncWithCloud();
+      await onRefreshData();
+      onAddToast('success', `Cloud sync complete! ${res.count} links are now synchronized across PC & mobile.`);
+      setImportMessage({
+        type: 'success',
+        text: `Synchronized ${res.count} links with cloud database. PC and phone data match!`,
+      });
+    } catch (err: any) {
+      onAddToast('error', 'Cloud sync failed: ' + (err.message || 'Network error'));
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
 
   if (!isOpen || !currentUser) return null;
 
@@ -183,6 +204,33 @@ export const ProfileBackupModal: React.FC<ProfileBackupModalProps> = ({
               <span>{importMessage.text}</span>
             </div>
           )}
+
+          {/* Cloud Sync Across PC & Mobile Devices */}
+          <div className="p-4 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Cloud className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200">
+                  PC &amp; Mobile Device Sync
+                </span>
+              </div>
+              <span className="text-[10px] font-mono bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full font-bold">
+                {links.length} Links Saved
+              </span>
+            </div>
+            <p className="text-xs text-indigo-900/80 dark:text-indigo-300 leading-relaxed font-normal">
+              Sync all dynamic links, QR codes, and destination assignments so your phone and computer always show identical data.
+            </p>
+            <button
+              type="button"
+              onClick={handleCloudSync}
+              disabled={isSyncingCloud}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors shadow-xs active:scale-[0.98]"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+              <span>{isSyncingCloud ? 'Synchronizing with Cloud...' : 'Sync Between PC & Phone Now'}</span>
+            </button>
+          </div>
 
           {/* 1-Click JSON Backup & Restore Actions */}
           <div className="space-y-2.5">

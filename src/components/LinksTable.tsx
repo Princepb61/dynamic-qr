@@ -150,7 +150,7 @@ export const LinksTable: React.FC<LinksTableProps> = ({
           </div>
         ) : (
           filteredLinks.map((link) => {
-            const isUnassigned = link.isAssigned === false || !link.destinationUrl;
+            const isUnassigned = link.isAssigned === false || !link.destinationUrl || link.destinationUrl.trim() === '';
             const batchCode = getLast4Letters(link.slug);
 
             return (
@@ -389,7 +389,7 @@ export const LinksTable: React.FC<LinksTableProps> = ({
 
                     {/* Column 4: Status Toggle */}
                     <td className="px-5 py-4 text-center">
-                      {link.isAssigned === false ? (
+                      {isUnassigned ? (
                         <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 inline-block border border-amber-200 dark:border-amber-800">
                           Unassigned
                         </span>

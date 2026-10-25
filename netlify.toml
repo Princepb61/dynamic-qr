@@ -8,6 +8,12 @@
   NPM_FLAGS = "--legacy-peer-deps"
 
 [[redirects]]
+  from = "/api/*"
+  to = "https://ais-pre-bnzhp6ctec2pl4areo7m7e-627731568995.asia-southeast1.run.app/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

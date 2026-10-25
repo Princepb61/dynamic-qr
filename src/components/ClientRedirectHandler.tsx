@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 import { localDb } from '../services/localDb';
 import { api } from '../services/api';
 import { LinkRecord } from '../types';
 import {
   ExternalLink,
-  AlertCircle,
   Clock,
   QrCode,
   ArrowRight,
@@ -12,6 +12,8 @@ import {
   CheckCircle2,
   Lock,
   Sparkles,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { getLast4Letters } from '../utils/a4QrHelper';
 
@@ -20,8 +22,11 @@ interface ClientRedirectHandlerProps {
 }
 
 export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ slug }) => {
-  const [link, setLink] = useState<LinkRecord | null | undefined>(undefined);
+  const cleanSlug = slug.trim().toLowerCase().replace(/^\/r\//, '').replace(/^\//, '');
+  const [link, setLink] = useState<LinkRecord | undefined>(undefined);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Scan-to-Assign Authentication & Assignment State
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
@@ -44,25 +49,94 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
   const [assignError, setAssignError] = useState<string | null>(null);
   const [assignSuccess, setAssignSuccess] = useState<string | null>(null);
 
+  const fullRedirectUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/r/${cleanSlug}`
+    : `/r/${cleanSlug}`;
+
+  // Generate QR code data URL for preview
   useEffect(() => {
-    const found = localDb.getLinkBySlug(slug);
-    setLink(found || null);
+    QRCode.toDataURL(fullRedirectUrl, {
+      margin: 2,
+      width: 200,
+      color: { dark: '#000000', light: '#ffffff' },
+      errorCorrectionLevel: 'H',
+    })
+      .then(setQrDataUrl)
+      .catch(() => {});
+  }, [fullRedirectUrl]);
 
-    if (found) {
-      setAssignTitle(found.title || '');
-    }
+  // Record pending slug in sessionStorage so if user ever navigates to login, they return right here
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('pending_assign_slug', cleanSlug);
+    } catch {}
+  }, [cleanSlug]);
 
-    if (found && found.isActive && found.destinationUrl) {
-      if (found.presentationMode !== 'button_page') {
-        setIsRedirecting(true);
-        localDb.simulateScan(found.id, 'mobile');
-        const timer = setTimeout(() => {
-          window.location.replace(found.destinationUrl);
-        }, 500);
-        return () => clearTimeout(timer);
+  useEffect(() => {
+    let active = true;
+
+    async function resolveSlug() {
+      // 1. Try local database
+      let found: LinkRecord | undefined = localDb.getLinkBySlug(cleanSlug);
+
+      // 2. If not found locally, try fetching latest links from server
+      if (!found) {
+        try {
+          const remote = await api.getLinks();
+          found = remote.links.find(
+            (l) => l.slug.toLowerCase() === cleanSlug || l.id === cleanSlug
+          );
+        } catch {}
       }
+
+      if (!active) return;
+
+      // 3. If found and already assigned to a destination, perform redirect
+      if (found && found.destinationUrl && found.destinationUrl.trim() !== '' && found.isAssigned !== false) {
+        setLink(found);
+        if (found.isActive) {
+          if (found.presentationMode !== 'button_page') {
+            setIsRedirecting(true);
+            localDb.simulateScan(found.id, 'mobile');
+            const timer = setTimeout(() => {
+              window.location.replace(found.destinationUrl);
+            }, 400);
+            return () => clearTimeout(timer);
+          }
+        }
+        return;
+      }
+
+      // 4. If found but unassigned, or if completely new pre-printed QR code:
+      // DO NOT 404! Treat as unassigned pre-printed QR stock ready for instant binding!
+      const resolvedLink: LinkRecord = found || {
+        id: `link_${cleanSlug}`,
+        slug: cleanSlug,
+        title: `Pre-Printed QR #${getLast4Letters(cleanSlug)}`,
+        destinationUrl: '',
+        isActive: true,
+        isAssigned: false,
+        totalClicks: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tags: ['Pre-Printed', 'Scanned'],
+      };
+
+      setLink(resolvedLink);
+      setAssignTitle(resolvedLink.title || `QR Code #${getLast4Letters(cleanSlug)}`);
     }
-  }, [slug]);
+
+    resolveSlug();
+    return () => {
+      active = false;
+    };
+  }, [cleanSlug]);
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(fullRedirectUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
 
   const handleAdminAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,7 +151,7 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
       localStorage.setItem('dynamicqr_token', res.token);
       setIsAdminLoggedIn(true);
     } catch (err: any) {
-      setAuthError(err.message || 'Authentication failed. Please verify credentials.');
+      setAuthError(err.message || 'Authentication failed. Please verify administrator credentials.');
     } finally {
       setIsAuthenticating(false);
     }
@@ -107,15 +181,20 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
 
     try {
       setIsAssigning(true);
-      await api.assignBatchLink(link.id, {
+      const res = await api.assignBatchLink(link.slug, {
         destinationUrl: target,
         title: assignTitle.trim() || link.title,
       });
 
+      // Clear pending slug
+      try {
+        sessionStorage.removeItem('pending_assign_slug');
+      } catch {}
+
       setAssignSuccess(`QR code /r/${link.slug} is now live! Redirecting...`);
       setTimeout(() => {
         window.location.replace(target);
-      }, 1200);
+      }, 1000);
     } catch (err: any) {
       setAssignError(err.message || 'Failed to bind destination URL.');
       setIsAssigning(false);
@@ -123,44 +202,19 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
   };
 
   // 1. Loading State
-  if (link === undefined) {
-    return (
-      <div className="min-h-screen bg-neutral-900 text-neutral-100 flex items-center justify-center p-6 font-sans">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium text-neutral-400">Loading dynamic link...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // 2. Link Not Found
   if (!link) {
     return (
-      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center p-4 sm:p-6 font-sans">
-        <div className="max-w-md w-full bg-neutral-900 border border-neutral-800 rounded-2xl p-6 sm:p-8 text-center shadow-2xl">
-          <div className="w-16 h-16 bg-neutral-800 rounded-full flex items-center justify-center mx-auto mb-4 text-neutral-400">
-            <AlertCircle className="w-8 h-8" />
-          </div>
-          <h1 className="text-xl font-bold mb-2">Dynamic Link Not Found</h1>
-          <p className="text-neutral-400 text-xs sm:text-sm mb-6">
-            The short link <code className="bg-neutral-800 px-2 py-1 rounded text-neutral-300 font-mono">/r/{slug}</code> does not exist or has not been deployed yet.
-          </p>
-          <button
-            onClick={() => {
-              window.location.href = '/';
-            }}
-            className="w-full bg-white text-neutral-900 font-bold py-2.5 px-4 rounded-xl text-xs sm:text-sm hover:bg-neutral-100 transition-colors shadow-xs"
-          >
-            Go to Admin Dashboard
-          </button>
+      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center p-6 font-sans">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-9 h-9 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm font-bold text-neutral-300">Checking dynamic link...</p>
         </div>
       </div>
     );
   }
 
-  // 3. Link Is Paused
-  if (!link.isActive) {
+  // 2. Link Is Paused
+  if (link.destinationUrl && !link.isActive) {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center p-4 sm:p-6 font-sans">
         <div className="max-w-md w-full bg-neutral-900 border border-neutral-800 rounded-2xl p-6 sm:p-8 text-center shadow-2xl">
@@ -184,21 +238,40 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
     );
   }
 
-  // 4. PRE-PRINTED / UNASSIGNED QR CODE: Dedicated On-Screen Scan-to-Assign Workflow!
+  // 3. UNASSIGNED QR CODE: Dedicated On-Screen Scan-to-Assign Workflow!
   if (!link.destinationUrl || link.isAssigned === false) {
     const batchCode = getLast4Letters(link.slug);
 
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center p-3 sm:p-6 font-sans">
         <div className="max-w-md w-full bg-neutral-900 border border-neutral-800 rounded-2xl p-5 sm:p-7 shadow-2xl space-y-5">
-          {/* Top Badge & Identifier */}
-          <div className="text-center space-y-2">
-            <div className="w-12 h-12 bg-indigo-950/60 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto border border-indigo-800/60 shadow-xs">
-              <QrCode className="w-6 h-6" />
+          {/* Top Identifier & QR Preview */}
+          <div className="text-center space-y-3">
+            {qrDataUrl && (
+              <div className="inline-block p-2 bg-white rounded-xl shadow-md border border-neutral-700">
+                <img src={qrDataUrl} alt="QR Code" className="w-28 h-28 object-contain" />
+              </div>
+            )}
+
+            {/* Mention ONLY the batch code directly under QR */}
+            <div className="text-center">
+              <span className="text-base font-mono font-black text-white tracking-widest block">
+                {batchCode}
+              </span>
             </div>
+
+            {/* COPY PERMANENT LINK BUTTON UNDER THE QR */}
+            <button
+              onClick={handleCopyLink}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold text-white bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-xl transition-all shadow-xs active:scale-[0.98]"
+            >
+              {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-indigo-400" />}
+              <span>{copiedLink ? 'Copied Permanent Link!' : 'Copy Permanent Link'}</span>
+            </button>
+
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-bold bg-indigo-950 text-indigo-300 rounded-md border border-indigo-800 mb-1">
-                <span>Code: {batchCode}</span>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-bold bg-amber-950/60 text-amber-300 rounded-md border border-amber-800/60 mb-1">
+                <span>Pre-Printed QR Code</span>
                 <span>&bull;</span>
                 <span>/r/{link.slug}</span>
               </div>
@@ -209,7 +282,7 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
             </div>
           </div>
 
-          {/* STEP A: If NOT logged in, prompt for admin email & password */}
+          {/* STEP A: If NOT logged in, prompt for admin password right on this screen */}
           {!isAdminLoggedIn ? (
             <div className="space-y-4 pt-2 border-t border-neutral-800">
               <div className="p-3 bg-neutral-800/80 rounded-xl border border-neutral-700/80 text-xs text-neutral-300 flex items-start gap-2.5">
@@ -260,7 +333,7 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
               </form>
             </div>
           ) : (
-            /* STEP B: Once logged in, show instant Destination URL Binding form! */
+            /* STEP B: Once logged in, show instant Destination URL Binding form right on the same screen! */
             <div className="space-y-4 pt-2 border-t border-neutral-800">
               <div className="p-3 bg-emerald-950/40 border border-emerald-900 rounded-xl text-xs text-emerald-300 flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
@@ -338,7 +411,7 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
     );
   }
 
-  // 5. Dynamic Button Page mode
+  // 4. Dynamic Button Page mode
   if (link.presentationMode === 'button_page' && link.dynamicButton?.enabled) {
     const btn = link.dynamicButton;
     return (
@@ -365,32 +438,21 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
 
           <div className="mt-8 pt-6 border-t border-neutral-800 flex items-center justify-center gap-2 text-xs text-neutral-500">
             <span className="font-mono text-neutral-400">Code: {getLast4Letters(link.slug)}</span>
-            <span>·</span>
-            <span>taplocalin Platform</span>
+            <span>&bull;</span>
+            <span>TAPLOCAN.IN</span>
           </div>
         </div>
       </div>
     );
   }
 
-  // 6. Automatic Instant HTTP 307 Redirecting Screen
+  // 5. Automatic Instant HTTP Redirecting Screen
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center p-6 font-sans">
       <div className="max-w-md w-full bg-neutral-900 border border-neutral-800 rounded-2xl p-8 text-center shadow-2xl space-y-4">
         <div className="w-12 h-12 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
-        <h2 className="text-lg font-bold">Redirecting you now...</h2>
-        <p className="text-xs text-neutral-400 font-mono truncate max-w-xs mx-auto">
-          {link.destinationUrl}
-        </p>
-        <div className="pt-2">
-          <a
-            href={link.destinationUrl}
-            className="text-xs text-indigo-400 hover:underline inline-flex items-center gap-1"
-          >
-            <span>Click here if not redirected automatically</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
+        <p className="text-sm font-semibold text-neutral-300">Redirecting to destination...</p>
+        <p className="text-xs text-neutral-500 font-mono">/r/{cleanSlug}</p>
       </div>
     </div>
   );
