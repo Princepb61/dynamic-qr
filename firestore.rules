@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Links collection: Public read and write for dynamic short links and QR assignment
+    match /links/{linkId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Clicks analytics collection: Scan telemetry
+    match /clicks/{clickId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if true;
+    }
+
+    // Default deny for unmapped paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { localDb } from '../services/localDb';
 import { api } from '../services/api';
+import { firestoreDb } from '../services/firestoreDb';
 import { LinkRecord } from '../types';
 import {
   ExternalLink,
@@ -76,39 +77,65 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
     let active = true;
 
     async function resolveSlug() {
-      // 1. Try local database
-      let found: LinkRecord | undefined = localDb.getLinkBySlug(cleanSlug);
+      // 1. Check Cloud Firestore FIRST (Global source of truth across all devices)
+      let found: LinkRecord | undefined = undefined;
+      try {
+        const cloudFound = await firestoreDb.getLinkBySlug(cleanSlug);
+        if (cloudFound) {
+          found = cloudFound;
+        }
+      } catch (err) {
+        console.warn('Firestore lookup error:', err);
+      }
 
-      // 2. If not found locally, try fetching latest links from server
-      if (!found) {
+      // 2. Check local database cache
+      const localFound = localDb.getLinkBySlug(cleanSlug);
+      if (localFound) {
+        if (!found) {
+          found = localFound;
+        } else if (localFound.destinationUrl && !found.destinationUrl) {
+          // If local has assignment but cloud was not yet updated, sync local assignment to cloud!
+          found = { ...found, ...localFound, isAssigned: true };
+          firestoreDb.assignBatchLink(cleanSlug, {
+            destinationUrl: localFound.destinationUrl,
+            title: localFound.title,
+          }).catch(() => {});
+        }
+      }
+
+      // 3. If still not found or missing destinationUrl, try fetching full links roster
+      if (!found || !found.destinationUrl) {
         try {
           const remote = await api.getLinks();
-          found = remote.links.find(
+          const remoteFound = remote.links.find(
             (l) => l.slug.toLowerCase() === cleanSlug || l.id === cleanSlug
           );
+          if (remoteFound && (remoteFound.destinationUrl || !found)) {
+            found = remoteFound;
+          }
         } catch {}
       }
 
       if (!active) return;
 
-      // 3. If found and already assigned to a destination, perform redirect
+      // 4. PUBLIC PERMANENT REDIRECT:
+      // If already assigned to a destination, perform instant public redirect (no login needed!)
       if (found && found.destinationUrl && found.destinationUrl.trim() !== '' && found.isAssigned !== false) {
         setLink(found);
         if (found.isActive) {
           if (found.presentationMode !== 'button_page') {
             setIsRedirecting(true);
+            firestoreDb.simulateScan(found.id, 'mobile').catch(() => {});
             localDb.simulateScan(found.id, 'mobile');
-            const timer = setTimeout(() => {
-              window.location.replace(found.destinationUrl);
-            }, 400);
-            return () => clearTimeout(timer);
+            // Instant redirect!
+            window.location.replace(found.destinationUrl);
+            return;
           }
         }
         return;
       }
 
-      // 4. If found but unassigned, or if completely new pre-printed QR code:
-      // DO NOT 404! Treat as unassigned pre-printed QR stock ready for instant binding!
+      // 5. If found but unassigned, or if completely new pre-printed QR code:
       const resolvedLink: LinkRecord = found || {
         id: `link_${cleanSlug}`,
         slug: cleanSlug,

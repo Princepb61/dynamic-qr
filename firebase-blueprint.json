@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "Link": {
+      "title": "Link",
+      "description": "A dynamic QR code short link redirect definition",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "slug": { "type": "string" },
+        "title": { "type": "string" },
+        "destinationUrl": { "type": "string" },
+        "description": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "isAssigned": { "type": "boolean" },
+        "totalClicks": { "type": "number" },
+        "ownerId": { "type": "string" },
+        "ownerEmail": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "slug", "isActive"]
+    },
+    "Click": {
+      "title": "Click",
+      "description": "A QR scan analytics record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "linkId": { "type": "string" },
+        "slug": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "deviceType": { "type": "string" }
+      },
+      "required": ["id", "slug"]
+    }
+  },
+  "firestore": {
+    "/links/{linkId}": {
+      "schema": "Link",
+      "description": "Global collection of dynamic short links and pre-printed QR assignments"
+    },
+    "/clicks/{clickId}": {
+      "schema": "Click",
+      "description": "Collection of scan events for analytics"
+    }
+  }
+}
