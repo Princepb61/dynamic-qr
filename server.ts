@@ -1326,15 +1326,15 @@ async function startServer() {
   // 4. Delete link
   app.delete('/api/links/:id', (req: Request, res: Response) => {
     const { id } = req.params;
+    const cleanId = id.trim().toLowerCase().replace(/^\/r\//, '').replace(/^\//, '');
     const db = loadDatabase();
-    const initialLen = db.links.length;
 
-    db.links = db.links.filter((l) => l.id !== id);
-    db.clicks = db.clicks.filter((c) => c.linkId !== id);
-
-    if (db.links.length === initialLen) {
-      return res.status(404).json({ error: 'Link not found.' });
-    }
+    db.links = db.links.filter(
+      (l) => l.id !== id && l.id.toLowerCase() !== cleanId && l.slug.toLowerCase() !== cleanId && l.slug.toLowerCase() !== id.toLowerCase()
+    );
+    db.clicks = db.clicks.filter(
+      (c) => c.linkId !== id && c.slug.toLowerCase() !== cleanId
+    );
 
     saveDatabase(db);
     res.json({ success: true, message: 'Link and analytics deleted.' });

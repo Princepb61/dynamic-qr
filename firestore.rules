@@ -14,6 +14,12 @@ service cloud.firestore {
       allow update, delete: if true;
     }
 
+    // Deleted links tombstones: Cross-device deletion sync
+    match /deleted_links/{slug} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // Default deny for unmapped paths
     match /{document=**} {
       allow read, write: if false;

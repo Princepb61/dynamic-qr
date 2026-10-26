@@ -32,6 +32,17 @@
         "deviceType": { "type": "string" }
       },
       "required": ["id", "slug"]
+    },
+    "DeletedLink": {
+      "title": "DeletedLink",
+      "description": "Tombstone record for deleted links to ensure cross-device synchronization",
+      "type": "object",
+      "properties": {
+        "slug": { "type": "string" },
+        "id": { "type": "string" },
+        "deletedAt": { "type": "string" }
+      },
+      "required": ["slug"]
     }
   },
   "firestore": {
@@ -42,6 +53,10 @@
     "/clicks/{clickId}": {
       "schema": "Click",
       "description": "Collection of scan events for analytics"
+    },
+    "/deleted_links/{slug}": {
+      "schema": "DeletedLink",
+      "description": "Tombstones for deleted links to prevent resurrection from stale device caches"
     }
   }
 }
