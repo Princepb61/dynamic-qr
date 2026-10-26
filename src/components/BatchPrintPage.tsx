@@ -356,8 +356,8 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
 
           {/* Printable Sheet Canvas - A4 Print Layout */}
           <div id="printable-sheet" className="printable-a4-container bg-white border border-neutral-200 rounded-xl p-8 shadow-xs print:border-0 print:p-0 print:shadow-none">
-            {/* Sheet Header (Included in print) */}
-            <div className="mb-6 pb-4 border-b border-neutral-200 flex items-center justify-between">
+            {/* Sheet Header (Hidden in print) */}
+            <div className="mb-6 pb-4 border-b border-neutral-200 flex items-center justify-between print:hidden">
               <div>
                 <h1 className="text-lg font-bold text-neutral-900 tracking-tight">
                   {batchName}
@@ -389,10 +389,10 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                 return (
                   <div
                     key={link.id}
-                    className="border-2 border-dashed border-neutral-300 rounded-xl p-4 flex flex-col items-center justify-between text-center bg-white relative hover:border-neutral-400 transition-colors"
+                    className="border-2 border-dashed border-neutral-300 print:border-none rounded-xl p-4 print:p-2 flex flex-col items-center justify-center text-center bg-white relative hover:border-neutral-400 transition-colors"
                   >
-                    {/* Top Serial & Watermark */}
-                    <div className="w-full flex items-center justify-between text-[11px] text-neutral-400 font-mono mb-2">
+                    {/* Top Serial & Watermark (Hidden in print) */}
+                    <div className="w-full flex items-center justify-between text-[11px] text-neutral-400 font-mono mb-2 print:hidden">
                       <span className="font-bold text-neutral-700">#{String(idx + 1).padStart(2, '0')}</span>
                       <span className="text-[10px] uppercase font-sans font-semibold tracking-wider text-neutral-500">
                         {isLinked ? 'Linked & Active' : 'Scan to Link'}
@@ -432,8 +432,8 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                       </button>
                     </div>
 
-                    {/* Bottom Slug & Cut Indicator */}
-                    <div className="w-full mt-1.5 pt-1.5 border-t border-neutral-100">
+                    {/* Bottom Slug & Cut Indicator (Hidden in print) */}
+                    <div className="w-full mt-1.5 pt-1.5 border-t border-neutral-100 print:hidden">
                       <div className="text-xs font-bold text-neutral-900 truncate">
                         {link.title}
                       </div>
@@ -477,8 +477,8 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
               })}
             </div>
 
-            {/* Cut line instructions (Included in print) */}
-            <div className="mt-6 pt-4 border-t border-neutral-200 text-center text-xs text-neutral-400 font-mono">
+            {/* Cut line instructions (Hidden in print) */}
+            <div className="mt-6 pt-4 border-t border-neutral-200 text-center text-xs text-neutral-400 font-mono print:hidden">
               <span>✂ Cut along dashed borders · Pre-printed stock ready for physical deployment · Assign destinations anytime</span>
             </div>
           </div>
