@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LinkRecord } from '../types';
 import QRCode from 'qrcode';
-import { Printer, Download, Check, Copy, QrCode } from 'lucide-react';
-import { getLast4Letters, downloadA4QRImage } from '../utils/a4QrHelper';
+import { Printer, Download, Check, Copy, QrCode, Share2, Smartphone } from 'lucide-react';
+import {
+  getLast4Letters,
+  downloadA4QRImage,
+  printA4QRSheet,
+  shareOrSaveA4QR,
+  isMobileDevice,
+} from '../utils/a4QrHelper';
 
 interface QRPrintCenterProps {
   links: LinkRecord[];
@@ -19,12 +25,16 @@ export const QRPrintCenter: React.FC<QRPrintCenterProps> = ({
 
   const [qrSizeOption, setQrSizeOption] = useState<'large' | 'medium' | 'compact'>('large');
   const [isDownloadingA4, setIsDownloadingA4] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const fullRedirectUrl = currentLink ? `${baseUrl}/r/${currentLink.slug}` : '';
+  const isMobile = isMobileDevice();
 
   const handleCopyLink = () => {
     if (!fullRedirectUrl) return;
@@ -55,8 +65,20 @@ export const QRPrintCenter: React.FC<QRPrintCenterProps> = ({
     );
   }, [currentLink, fullRedirectUrl, qrSizeOption]);
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    if (!currentLink) return;
+    try {
+      setIsPrinting(true);
+      await printA4QRSheet({
+        slug: currentLink.slug,
+        fullUrl: fullRedirectUrl,
+      });
+    } catch (err) {
+      console.error('Print sheet error:', err);
+      window.print();
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   const handleDownloadA4 = async () => {
@@ -74,6 +96,27 @@ export const QRPrintCenter: React.FC<QRPrintCenterProps> = ({
     }
   };
 
+  const handleShareOrAirPrint = async () => {
+    if (!currentLink) return;
+    try {
+      setIsSharing(true);
+      const res = await shareOrSaveA4QR({
+        slug: currentLink.slug,
+        fullUrl: fullRedirectUrl,
+      });
+      if (res === 'shared') {
+        setShareFeedback('Ready on Phone!');
+      } else {
+        setShareFeedback('Downloaded!');
+      }
+      setTimeout(() => setShareFeedback(null), 3000);
+    } catch (err) {
+      console.error('Share error:', err);
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
   if (!currentLink) {
     return (
       <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-12 text-center text-neutral-500 dark:text-neutral-400">
@@ -86,40 +129,76 @@ export const QRPrintCenter: React.FC<QRPrintCenterProps> = ({
   const batchCode = getLast4Letters(currentLink.slug);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Top Header Bar (Hidden during print) */}
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden transition-colors">
+      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden transition-colors">
         <div>
-          <h2 className="text-base sm:text-lg font-black tracking-tight text-neutral-950 dark:text-white">
-            QR Print Center
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-black tracking-tight text-neutral-950 dark:text-white">
+              A4 QR Print Center
+            </h2>
+            <span className="px-2 py-0.5 text-[10px] font-bold font-mono bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded-full border border-indigo-200 dark:border-indigo-800">
+              Code: {batchCode}
+            </span>
+          </div>
           <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-            Clean A4 print format featuring only the borderless QR code and the 4-digit code.
+            Optimized for smartphones and desktop printers. Contains strictly the borderless QR code and 4-digit code.
           </p>
         </div>
+
+        {/* Action Buttons: Download, Native AirPrint/Share, Print */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+          {/* Smartphone AirPrint & Share sheet button */}
+          <button
+            onClick={handleShareOrAirPrint}
+            disabled={isSharing}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] rounded-xl transition-all shadow-xs"
+            title="AirPrint, Save to Photos, or Share to WhatsApp/Files"
+          >
+            {shareFeedback ? (
+              <Check className="w-4 h-4 text-white" />
+            ) : isMobile ? (
+              <Smartphone className="w-4 h-4 text-white" />
+            ) : (
+              <Share2 className="w-4 h-4 text-white" />
+            )}
+            <span>
+              {isSharing
+                ? 'Preparing Sheet...'
+                : shareFeedback
+                ? shareFeedback
+                : isMobile
+                ? 'AirPrint / Save to Phone'
+                : 'Share / Save A4'}
+            </span>
+          </button>
+
+          {/* Download A4 PNG */}
           <button
             onClick={handleDownloadA4}
             disabled={isDownloadingA4}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-xs active:scale-[0.98]"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-neutral-800 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 border border-neutral-300 dark:border-neutral-700 rounded-xl transition-colors shadow-xs active:scale-[0.98]"
           >
-            <Download className="w-4 h-4 stroke-[2.5]" />
-            <span>{isDownloadingA4 ? 'Generating Image...' : 'Download A4 Image'}</span>
+            <Download className="w-4 h-4 stroke-[2]" />
+            <span>{isDownloadingA4 ? 'Saving...' : 'Download A4 Image'}</span>
           </button>
+
+          {/* Direct Print Button */}
           <button
             onClick={handlePrint}
+            disabled={isPrinting}
             className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-neutral-800 dark:text-white bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 border border-neutral-300 dark:border-neutral-700 rounded-xl transition-colors shadow-xs active:scale-[0.98]"
           >
             <Printer className="w-4 h-4" />
-            <span>Print Sheet</span>
+            <span>{isPrinting ? 'Opening Print...' : 'Print Sheet'}</span>
           </button>
         </div>
       </div>
 
       {/* Editor & Preview Split */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
         {/* Controls Column (Hidden in print) */}
-        <div className="lg:col-span-4 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-xs space-y-4 print:hidden transition-colors">
+        <div className="lg:col-span-4 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4 print:hidden transition-colors">
           <div>
             <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1.5">
               Select Dynamic Link Asset
@@ -130,7 +209,7 @@ export const QRPrintCenter: React.FC<QRPrintCenterProps> = ({
                 const found = links.find((l) => l.id === e.target.value);
                 if (found) onSelectLink(found);
               }}
-              className="w-full px-3 py-2 text-xs border border-neutral-300 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none focus:border-neutral-900 font-medium"
+              className="w-full px-3 py-2.5 text-xs border border-neutral-300 dark:border-neutral-700 rounded-xl bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none focus:border-neutral-900 dark:focus:border-white font-medium"
             >
               {links.map((l) => (
                 <option key={l.id} value={l.id}>
@@ -144,9 +223,9 @@ export const QRPrintCenter: React.FC<QRPrintCenterProps> = ({
             <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1.5">
               Display Size on Sheet
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
               {[
-                { id: 'large', label: 'Large (A4 Poster)' },
+                { id: 'large', label: 'Large (Poster)' },
                 { id: 'medium', label: 'Medium (Standee)' },
                 { id: 'compact', label: 'Compact (Sticker)' },
               ].map((item) => (
@@ -154,7 +233,7 @@ export const QRPrintCenter: React.FC<QRPrintCenterProps> = ({
                   key={item.id}
                   type="button"
                   onClick={() => setQrSizeOption(item.id as any)}
-                  className={`py-2 px-2.5 text-xs font-bold rounded-lg border text-center transition-colors ${
+                  className={`py-2 px-1.5 sm:px-2.5 text-xs font-bold rounded-lg border text-center transition-colors truncate ${
                     qrSizeOption === item.id
                       ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 border-neutral-900 dark:border-white shadow-xs'
                       : 'border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800'
@@ -171,40 +250,40 @@ export const QRPrintCenter: React.FC<QRPrintCenterProps> = ({
             <button
               type="button"
               onClick={handleCopyLink}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-3 text-xs font-bold text-neutral-800 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 border border-neutral-300 dark:border-neutral-700 rounded-xl transition-colors shadow-2xs"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-3 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 rounded-xl transition-colors shadow-2xs"
             >
               {copiedLink ? <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />}
-              <span>{copiedLink ? 'Copied Permanent Link!' : `Copy Link (/r/${currentLink.slug})`}</span>
+              <span className="truncate">{copiedLink ? 'Copied Permanent Link!' : `Copy Link (/r/${currentLink.slug})`}</span>
             </button>
           </div>
 
-          {/* Guarantee Reassurance Notice */}
-          <div className="p-3 bg-neutral-50 dark:bg-neutral-800/60 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-600 dark:text-neutral-400 space-y-1">
+          {/* Smartphone Tips Notice */}
+          <div className="p-3.5 bg-neutral-50 dark:bg-neutral-800/60 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-600 dark:text-neutral-400 space-y-1.5">
             <div className="font-bold text-neutral-900 dark:text-neutral-200 flex items-center gap-1.5">
-              <QrCode className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span>Clean Print Layout</span>
+              <Smartphone className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Smartphone Printing Tip</span>
             </div>
             <p className="leading-relaxed">
-              All branding, titles, URLs, instructions, and outlines have been removed. The printed page contains exclusively the borderless QR code and its 4-digit code.
+              On phones, tap <strong>AirPrint / Save to Phone</strong> to instantly send to your wireless printer, AirDrop to a Mac, or Save to Photos/Files for print shop reproduction.
             </p>
           </div>
         </div>
 
         {/* Live Print Preview Sheet */}
-        <div className="lg:col-span-8 flex justify-center bg-neutral-100/70 dark:bg-neutral-950/60 p-3 sm:p-6 lg:p-8 rounded-xl border border-neutral-200/80 dark:border-neutral-800 min-h-[420px] sm:min-h-[500px]">
+        <div className="lg:col-span-8 flex justify-center bg-neutral-100/70 dark:bg-neutral-950/60 p-3 sm:p-6 lg:p-8 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 min-h-[380px] sm:min-h-[500px]">
           {/* Printable Container: EXCLUSIVELY QR CODE AND 4 DIGITS */}
           <div
             id="printable-card"
-            className="bg-white text-neutral-900 shadow-lg border border-neutral-300 rounded-xl p-8 sm:p-12 flex flex-col items-center justify-center text-center transition-all w-full max-w-[210mm] aspect-[210/297] print:shadow-none print:border-none print:w-full print:h-screen print:max-w-none print:p-0 print:m-0"
+            className="bg-white text-neutral-900 shadow-lg border border-neutral-300 rounded-xl p-6 sm:p-12 flex flex-col items-center justify-center text-center transition-all w-full max-w-[210mm] aspect-[210/297] print:shadow-none print:border-none print:w-full print:h-screen print:max-w-none print:p-0 print:m-0"
           >
             {/* Pure Borderless QR Code Canvas */}
-            <div className="flex items-center justify-center p-2 bg-white">
-              <canvas ref={canvasRef} />
+            <div className="flex items-center justify-center p-2 bg-white max-w-full">
+              <canvas ref={canvasRef} className="max-w-full h-auto" />
             </div>
 
             {/* ONLY the 4 digits directly underneath the QR code */}
             <div className="mt-4 sm:mt-6 text-center">
-              <span className="text-3xl sm:text-5xl font-mono font-black text-neutral-950 tracking-widest block select-all">
+              <span className="text-2xl sm:text-5xl font-mono font-black text-neutral-950 tracking-widest block select-all">
                 {batchCode}
               </span>
             </div>

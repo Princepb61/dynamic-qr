@@ -33,7 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
           <div>
             <span className="text-base sm:text-lg font-black tracking-tight text-neutral-950 dark:text-white whitespace-nowrap block leading-tight">
-              TAPLOCAN.IN
+              TAPLOCAL.IN
             </span>
             <span className="text-[9px] sm:text-[10px] text-neutral-500 dark:text-neutral-400 font-bold uppercase tracking-wider block">
               Admin Console
@@ -69,6 +69,18 @@ export const Header: React.FC<HeaderProps> = ({
                 {unassignedCount}
               </span>
             )}
+          </button>
+
+          {/* Clean Single A4 Print Tab */}
+          <button
+            onClick={() => setActiveTab('print')}
+            className={`transition-colors whitespace-nowrap shrink-0 py-5 border-b-2 text-sm font-bold ${
+              activeTab === 'print'
+                ? 'border-neutral-950 dark:border-white text-neutral-950 dark:text-white'
+                : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-950 dark:hover:text-white'
+            }`}
+          >
+            A4 Print Center
           </button>
         </nav>
 
@@ -116,21 +128,21 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Mobile Phone Navigation Bar (Thumb-friendly touch targets) */}
-      <div className="md:hidden grid grid-cols-2 px-2 py-1.5 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 text-xs font-bold gap-1.5">
+      <div className="md:hidden grid grid-cols-3 px-2 py-1.5 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 text-xs font-bold gap-1">
         <button
           onClick={() => setActiveTab('links')}
-          className={`py-2 px-2 rounded-lg text-center transition-all min-h-[38px] flex items-center justify-center ${
+          className={`py-2 px-1 rounded-lg text-center transition-all min-h-[38px] flex items-center justify-center truncate ${
             activeTab === 'links'
               ? 'bg-neutral-950 dark:bg-white text-white dark:text-neutral-900 font-black shadow-xs'
               : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'
           }`}
         >
-          Dynamic Links
+          Links
         </button>
 
         <button
           onClick={() => setActiveTab('batch-print')}
-          className={`py-2 px-2 rounded-lg text-center transition-all min-h-[38px] flex items-center justify-center gap-1.5 ${
+          className={`py-2 px-1 rounded-lg text-center transition-all min-h-[38px] flex items-center justify-center gap-1 truncate ${
             activeTab === 'batch-print'
               ? 'bg-neutral-950 dark:bg-white text-white dark:text-neutral-900 font-black shadow-xs'
               : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'
@@ -138,10 +150,21 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <span>Multi-QR</span>
           {unassignedCount > 0 && (
-            <span className="px-1.5 py-0.2 bg-indigo-600 text-white rounded-full text-[10px]">
+            <span className="px-1.5 py-0.5 bg-indigo-600 text-white rounded-full text-[10px] leading-none">
               {unassignedCount}
             </span>
           )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('print')}
+          className={`py-2 px-1 rounded-lg text-center transition-all min-h-[38px] flex items-center justify-center truncate ${
+            activeTab === 'print'
+              ? 'bg-neutral-950 dark:bg-white text-white dark:text-neutral-900 font-black shadow-xs'
+              : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'
+          }`}
+        >
+          A4 Print
         </button>
       </div>
     </header>

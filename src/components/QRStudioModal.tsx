@@ -16,7 +16,13 @@ import {
   Trash2,
   Printer,
 } from 'lucide-react';
-import { getLast4Letters, downloadA4QRImage } from '../utils/a4QrHelper';
+import {
+  getLast4Letters,
+  downloadA4QRImage,
+  printA4QRSheet,
+  shareOrSaveA4QR,
+  isMobileDevice,
+} from '../utils/a4QrHelper';
 
 interface QRStudioModalProps {
   link: LinkRecord | null;
@@ -52,6 +58,10 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
   const [exportRes, setExportRes] = useState<512 | 1024 | 2048>(1024);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedImage, setCopiedImage] = useState(false);
+  const [isDownloadingA4, setIsDownloadingA4] = useState(false);
+  const [isPrintingA4, setIsPrintingA4] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     if (link) {
@@ -90,18 +100,13 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
 
   if (!isOpen || !link) return null;
 
-  const [isDownloadingA4, setIsDownloadingA4] = useState(false);
-
   const handleDownloadA4 = async () => {
     if (!link) return;
     try {
       setIsDownloadingA4(true);
       await downloadA4QRImage({
         slug: link.slug,
-        title: link.title,
         fullUrl: fullRedirectUrl,
-        brandName: 'taplocalin',
-        subcaption: 'Scan with smartphone camera to open',
       });
     } catch (err) {
       console.error('A4 download error:', err);
@@ -110,8 +115,41 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
     }
   };
 
-  const handlePrintA4 = () => {
-    window.print();
+  const handlePrintA4 = async () => {
+    if (!link) return;
+    try {
+      setIsPrintingA4(true);
+      await printA4QRSheet({
+        slug: link.slug,
+        fullUrl: fullRedirectUrl,
+      });
+    } catch (err) {
+      console.error('Print A4 error:', err);
+      window.print();
+    } finally {
+      setIsPrintingA4(false);
+    }
+  };
+
+  const handleShareOrAirPrint = async () => {
+    if (!link) return;
+    try {
+      setIsSharing(true);
+      const res = await shareOrSaveA4QR({
+        slug: link.slug,
+        fullUrl: fullRedirectUrl,
+      });
+      if (res === 'shared') {
+        setShareFeedback('Ready on Phone!');
+      } else {
+        setShareFeedback('Downloaded!');
+      }
+      setTimeout(() => setShareFeedback(null), 3000);
+    } catch (err) {
+      console.error('Share error:', err);
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   const handleDownloadPNG = async () => {
@@ -476,14 +514,30 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
             {/* Download & Print Actions */}
             <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 space-y-2.5">
               {/* PRIMARY ACTION: Download A4 Size Image */}
-              <button
-                onClick={handleDownloadA4}
-                disabled={isDownloadingA4}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 text-xs font-black uppercase tracking-wider text-white bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] rounded-xl transition-all shadow-sm"
-              >
-                <Download className="w-4 h-4 stroke-[2.5]" />
-                <span>{isDownloadingA4 ? 'Generating A4 Image...' : 'Download A4 Size Image (Print Ready)'}</span>
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  onClick={handleShareOrAirPrint}
+                  disabled={isSharing}
+                  className="w-full flex items-center justify-center gap-2 py-3 px-3 text-xs font-black uppercase tracking-wider text-white bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] rounded-xl transition-all shadow-xs"
+                >
+                  {shareFeedback ? (
+                    <Check className="w-4 h-4 text-white" />
+                  ) : (
+                    <Printer className="w-4 h-4 text-white" />
+                  )}
+                  <span>{isSharing ? 'Preparing...' : shareFeedback ? shareFeedback : 'AirPrint / Save on Phone'}</span>
+                </button>
+
+                <button
+                  onClick={handleDownloadA4}
+                  disabled={isDownloadingA4}
+                  className="w-full flex items-center justify-center gap-2 py-3 px-3 text-xs font-black uppercase tracking-wider text-neutral-800 dark:text-white bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-[0.99] rounded-xl transition-all border border-neutral-300 dark:border-neutral-700"
+                >
+                  <Download className="w-4 h-4 stroke-[2.5]" />
+                  <span>{isDownloadingA4 ? 'Generating...' : 'Download A4 Image'}</span>
+                </button>
+              </div>
+
               <div className="flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400 px-1 font-medium">
                 <span>Standard A4 (210×297mm · 2480×3508px)</span>
                 <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">Code: {getLast4Letters(link.slug)}</span>
@@ -492,10 +546,11 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
               {/* Direct Print A4 Command Button */}
               <button
                 onClick={handlePrintA4}
+                disabled={isPrintingA4}
                 className="w-full flex items-center justify-center gap-2 py-2.5 px-3 text-xs font-bold text-neutral-800 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors border border-neutral-300 dark:border-neutral-700"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>Command Print (A4 Format)</span>
+                <span>{isPrintingA4 ? 'Opening Clean Print...' : 'Command Print (A4 Format)'}</span>
               </button>
 
               {/* Secondary Single Asset Downloads */}

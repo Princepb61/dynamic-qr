@@ -332,7 +332,7 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
                     onChange={(e) => setAuthEmail(e.target.value)}
                     placeholder="p0667500@gmail.com"
                     required
-                    className="w-full px-3 py-2 text-xs font-mono bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3.5 py-3 sm:py-2 text-base sm:text-xs font-mono bg-neutral-800 border border-neutral-700 rounded-xl text-white focus:outline-none focus:border-indigo-500"
                   />
                 </div>
 
@@ -345,14 +345,14 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
                     placeholder="••••••••••••"
                     required
                     autoFocus
-                    className="w-full px-3 py-2 text-xs bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3.5 py-3 sm:py-2 text-base sm:text-xs bg-neutral-800 border border-neutral-700 rounded-xl text-white focus:outline-none focus:border-indigo-500"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={isAuthenticating}
-                  className="w-full py-2.5 px-4 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors shadow-xs flex items-center justify-center gap-2"
+                  className="w-full min-h-[44px] py-3 sm:py-2.5 px-4 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] rounded-xl transition-all shadow-xs flex items-center justify-center gap-2"
                 >
                   <ShieldCheck className="w-4 h-4" />
                   <span>{isAuthenticating ? 'Verifying...' : 'Unlock & Assign Destination'}</span>
@@ -392,7 +392,7 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
                     placeholder="https://example.com/daily-menu"
                     required
                     autoFocus
-                    className="w-full px-3 py-2.5 text-xs font-mono bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3.5 py-3 sm:py-2.5 text-base sm:text-xs font-mono bg-neutral-800 border border-neutral-700 rounded-xl text-white focus:outline-none focus:border-indigo-500"
                   />
                 </div>
 
@@ -405,14 +405,14 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
                     value={assignTitle}
                     onChange={(e) => setAssignTitle(e.target.value)}
                     placeholder="e.g. Table 04 Acrylic Standee"
-                    className="w-full px-3 py-2 text-xs bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3.5 py-3 sm:py-2 text-base sm:text-xs bg-neutral-800 border border-neutral-700 rounded-xl text-white focus:outline-none focus:border-indigo-500"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={isAssigning}
-                  className="w-full py-2.5 px-4 text-xs font-black uppercase tracking-wider text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors shadow-xs flex items-center justify-center gap-2"
+                  className="w-full min-h-[44px] py-3 sm:py-2.5 px-4 text-xs font-black uppercase tracking-wider text-white bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] rounded-xl transition-all shadow-xs flex items-center justify-center gap-2"
                 >
                   <Sparkles className="w-4 h-4 text-amber-300" />
                   <span>{isAssigning ? 'Activating QR...' : 'Bind Destination & Activate QR'}</span>
@@ -466,7 +466,7 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
           <div className="mt-8 pt-6 border-t border-neutral-800 flex items-center justify-center gap-2 text-xs text-neutral-500">
             <span className="font-mono text-neutral-400">Code: {getLast4Letters(link.slug)}</span>
             <span>&bull;</span>
-            <span>TAPLOCAN.IN</span>
+            <span>TAPLOCAL.IN</span>
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan for removing credential displays, eliminating client portal, adding permanent link copy buttons, building on-page scan-to-assign, and implementing persistent profile data storage with one-click JSON backup.",
-  "updatedAt":  "2026-10-25T10:47:48.306730582Z",
+  "summary":  "Implementation plan and status for smartphone A4 QR printing, native AirPrint/Save to Phone, and mobile workflow optimizations.",
+  "updatedAt":  "2026-10-26T09:26:49.523114388Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

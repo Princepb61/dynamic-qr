@@ -273,8 +273,8 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
             </div>
 
             {/* Presentation Mode Selector */}
-            <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-xl space-y-2">
-              <span className="text-xs font-bold text-neutral-900 block">
+            <div className="p-4 bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 rounded-xl space-y-2">
+              <span className="text-xs font-bold text-neutral-900 dark:text-white block">
                 How should visitors experience /r/{link.slug}?
               </span>
               <div className="grid grid-cols-2 gap-2">
@@ -283,15 +283,15 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
                   onClick={() => setPresentationMode('button_page')}
                   className={`p-3 rounded-lg border text-left transition-colors ${
                     presentationMode === 'button_page'
-                      ? 'bg-white border-neutral-900 shadow-xs'
-                      : 'border-neutral-200 text-neutral-600 hover:bg-white'
+                      ? 'bg-white dark:bg-neutral-800 border-neutral-900 dark:border-white shadow-xs'
+                      : 'border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:bg-white dark:hover:bg-neutral-800'
                   }`}
                 >
-                  <div className="flex items-center gap-1.5 font-semibold text-xs text-neutral-900">
-                    <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
+                  <div className="flex items-center gap-1.5 font-semibold text-xs text-neutral-900 dark:text-white">
+                    <Smartphone className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                     <span>Dynamic Button Page</span>
                   </div>
-                  <p className="text-[11px] text-neutral-500 mt-1 leading-snug">
+                  <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1 leading-snug">
                     Displays modern tap card with this dynamic action button.
                   </p>
                 </button>
@@ -301,15 +301,15 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
                   onClick={() => setPresentationMode('instant_redirect')}
                   className={`p-3 rounded-lg border text-left transition-colors ${
                     presentationMode === 'instant_redirect'
-                      ? 'bg-white border-neutral-900 shadow-xs'
-                      : 'border-neutral-200 text-neutral-600 hover:bg-white'
+                      ? 'bg-white dark:bg-neutral-800 border-neutral-900 dark:border-white shadow-xs'
+                      : 'border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:bg-white dark:hover:bg-neutral-800'
                   }`}
                 >
-                  <div className="flex items-center gap-1.5 font-semibold text-xs text-neutral-900">
-                    <Zap className="w-3.5 h-3.5 text-amber-600" />
+                  <div className="flex items-center gap-1.5 font-semibold text-xs text-neutral-900 dark:text-white">
+                    <Zap className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                     <span>Instant 307 Redirect</span>
                   </div>
-                  <p className="text-[11px] text-neutral-500 mt-1 leading-snug">
+                  <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1 leading-snug">
                     Jumps immediately to destination URL. (Embed code still works).
                   </p>
                 </button>
@@ -319,14 +319,14 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
             {/* 1-Click Embed Snippet Generator */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-neutral-700 uppercase tracking-wider">
+                <span className="text-xs font-bold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider">
                   Embed Code (Place on Any Site or Email)
                 </span>
-                <div className="flex items-center gap-1 bg-neutral-100 p-0.5 rounded-lg text-xs font-medium">
+                <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-800 p-0.5 rounded-lg text-xs font-medium">
                   <button
                     onClick={() => setActiveCodeTab('html')}
                     className={`px-2.5 py-1 rounded-md transition-colors ${
-                      activeCodeTab === 'html' ? 'bg-white text-neutral-900 shadow-2xs' : 'text-neutral-500'
+                      activeCodeTab === 'html' ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-2xs' : 'text-neutral-500 dark:text-neutral-400'
                     }`}
                   >
                     HTML
@@ -334,7 +334,7 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
                   <button
                     onClick={() => setActiveCodeTab('react')}
                     className={`px-2.5 py-1 rounded-md transition-colors ${
-                      activeCodeTab === 'react' ? 'bg-white text-neutral-900 shadow-2xs' : 'text-neutral-500'
+                      activeCodeTab === 'react' ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-2xs' : 'text-neutral-500 dark:text-neutral-400'
                     }`}
                   >
                     React
@@ -342,7 +342,7 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
                   <button
                     onClick={() => setActiveCodeTab('markdown')}
                     className={`px-2.5 py-1 rounded-md transition-colors ${
-                      activeCodeTab === 'markdown' ? 'bg-white text-neutral-900 shadow-2xs' : 'text-neutral-500'
+                      activeCodeTab === 'markdown' ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-2xs' : 'text-neutral-500 dark:text-neutral-400'
                     }`}
                   >
                     Markdown
@@ -391,7 +391,7 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
           <div className="lg:col-span-5 space-y-4">
             {/* Button Text */}
             <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">
+              <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
                 Button Label / Call to Action <span className="text-red-500">*</span>
               </label>
               <input
@@ -399,13 +399,13 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder="e.g. Order Online, Book Now, Join VIP"
-                className="w-full px-3 py-2 text-xs border border-neutral-300 rounded-lg focus:outline-none focus:border-neutral-900"
+                className="w-full px-3 py-2 text-xs border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white rounded-lg focus:outline-none focus:border-neutral-900 dark:focus:border-neutral-400"
               />
             </div>
 
             {/* Subtitle */}
             <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">
+              <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
                 Button Tagline / Subtitle (Optional)
               </label>
               <input
@@ -413,13 +413,13 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
                 value={subtitle}
                 onChange={(e) => setSubtitle(e.target.value)}
                 placeholder="e.g. Instant Delivery · 20% Off"
-                className="w-full px-3 py-2 text-xs border border-neutral-300 rounded-lg focus:outline-none focus:border-neutral-900"
+                className="w-full px-3 py-2 text-xs border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white rounded-lg focus:outline-none focus:border-neutral-900 dark:focus:border-neutral-400"
               />
             </div>
 
             {/* Theme Selector */}
             <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
+              <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                 Color Theme
               </label>
               <div className="grid grid-cols-3 gap-1.5">
@@ -437,12 +437,12 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
                     onClick={() => setTheme(item.id as any)}
                     className={`p-2 rounded-lg border text-left transition-colors flex items-center gap-2 ${
                       theme === item.id
-                        ? 'border-neutral-900 bg-neutral-50 ring-1 ring-neutral-900'
-                        : 'border-neutral-200 hover:bg-neutral-50'
+                        ? 'border-neutral-900 dark:border-white bg-neutral-50 dark:bg-neutral-800 ring-1 ring-neutral-900 dark:ring-white'
+                        : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'
                     }`}
                   >
                     <span className={`w-3 h-3 rounded-full ${item.preview} shrink-0`} />
-                    <span className="text-[11px] font-medium text-neutral-800 truncate">
+                    <span className="text-[11px] font-medium text-neutral-800 dark:text-neutral-200 truncate">
                       {item.label}
                     </span>
                   </button>
@@ -452,7 +452,7 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
 
             {/* Shape */}
             <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
+              <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                 Button Shape
               </label>
               <div className="grid grid-cols-3 gap-1.5">
@@ -465,10 +465,10 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
                     key={item.id}
                     type="button"
                     onClick={() => setShape(item.id as any)}
-                    className={`py-1.5 px-2 text-xs font-medium rounded-lg border transition-colors ${
+                    className={`py-1.5 px-2 text-xs font-bold rounded-lg border transition-colors ${
                       shape === item.id
-                        ? 'bg-neutral-900 text-white border-neutral-900'
-                        : 'border-neutral-200 text-neutral-700 hover:bg-neutral-50'
+                        ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-950 border-neutral-900 dark:border-white'
+                        : 'border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800'
                     }`}
                   >
                     {item.label}
@@ -479,7 +479,7 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
 
             {/* Icon */}
             <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
+              <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                 Button Icon
               </label>
               <div className="grid grid-cols-4 gap-1.5">
@@ -499,8 +499,8 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
                     onClick={() => setIcon(item.id as any)}
                     className={`py-1.5 px-2 text-xs font-medium rounded-lg border transition-colors flex items-center justify-center gap-1 ${
                       icon === item.id
-                        ? 'bg-neutral-900 text-white border-neutral-900'
-                        : 'border-neutral-200 text-neutral-700 hover:bg-neutral-50'
+                        ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-950 border-neutral-900 dark:border-white'
+                        : 'border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800'
                     }`}
                   >
                     <span className="text-[11px] capitalize">{item.label}</span>
