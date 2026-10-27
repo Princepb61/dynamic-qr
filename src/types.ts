@@ -1,3 +1,25 @@
+export type LabelPresetType =
+  | 'a4_grid'
+  | 'square_sticker'
+  | 'business_card'
+  | 'thermal_2in'
+  | 'thermal_3in'
+  | 'shelf_tag';
+
+export interface BatchRecord {
+  id: string;
+  name: string;
+  prefix: string;
+  count: number;
+  labelPreset: LabelPresetType;
+  ownerId: string;
+  ownerEmail?: string;
+  createdAt: string;
+  unassignedCount?: number;
+  slugs?: string[];
+  links?: LinkRecord[];
+}
+
 export interface QRSettings {
   colorDark: string;
   colorLight: string;

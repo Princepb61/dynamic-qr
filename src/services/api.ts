@@ -1,4 +1,4 @@
-import { LinkRecord, LinkAnalytics, GlobalOverview, ClickRecord, UserRecord } from '../types';
+import { LinkRecord, LinkAnalytics, GlobalOverview, ClickRecord, UserRecord, BatchRecord, LabelPresetType } from '../types';
 import { localDb } from './localDb';
 import { firestoreDb } from './firestoreDb';
 
@@ -15,6 +15,26 @@ async function parseJsonResponse(res: Response): Promise<any | null> {
   } catch {
     return null;
   }
+}
+
+// Local cache for quick tombstone check before network completes
+function getLocalTombstones(): Set<string> {
+  try {
+    const raw = localStorage.getItem('taplocalin_deleted_tombstones');
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr.map((s: string) => s.toLowerCase()) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function addLocalTombstone(slugOrId: string) {
+  try {
+    const set = getLocalTombstones();
+    set.add(slugOrId.toLowerCase().trim());
+    localStorage.setItem('taplocalin_deleted_tombstones', JSON.stringify(Array.from(set)));
+  } catch {}
 }
 
 export const api = {
@@ -51,6 +71,7 @@ export const api = {
     ownerId?: string;
     ownerEmail?: string;
     ownerName?: string;
+    labelPreset?: LabelPresetType;
   }): Promise<{ success: boolean; batchId: string; batchName: string; count: number; links: LinkRecord[] }> {
     // 1. Save in Firestore Cloud Database for cross-device sync
     try {
@@ -77,6 +98,29 @@ export const api = {
 
     // 3. Fallback to localDb
     return localDb.generateBatch(payload);
+  },
+
+  /**
+   * Fetch all saved batch manifests from Firestore
+   */
+  async getBatches(ownerId?: string): Promise<BatchRecord[]> {
+    try {
+      const cloudBatches = await firestoreDb.getBatches(ownerId);
+      if (cloudBatches.length > 0) return cloudBatches;
+    } catch (e) {
+      console.warn('Firestore getBatches error:', e);
+    }
+    return [];
+  },
+
+  /**
+   * Delete an entire batch and its associated QR links
+   */
+  async deleteBatch(batchId: string): Promise<boolean> {
+    try {
+      await firestoreDb.deleteBatch(batchId);
+    } catch {}
+    return true;
   },
 
   /**
@@ -120,83 +164,48 @@ export const api = {
 
   /**
    * Dynamic Links: Fetches from Cloud Firestore, ensuring PC & mobile are always in sync.
+   * Completely prevents zombie / deleted links from being resurrected by stale local cache.
    */
   async getLinks(ownerId?: string): Promise<{ links: LinkRecord[]; totalLinks: number; totalClicks: number }> {
-    const localData = await localDb.getLinks(ownerId);
-    let allLinks: LinkRecord[] = [...localData.links];
+    const localTombstones = getLocalTombstones();
 
-    // 1. Query Firestore for real-time cloud data
+    // 1. Query Firestore for real-time cloud data and deleted tombstones
     try {
-      const cloudLinks = await firestoreDb.getLinks(ownerId);
+      const [cloudLinks, cloudTombstones] = await Promise.all([
+        firestoreDb.getLinks(ownerId),
+        firestoreDb.getDeletedSlugs(),
+      ]);
+
+      // Combine tombstones
+      cloudTombstones.forEach((t) => localTombstones.add(t));
+      try {
+        localStorage.setItem('taplocalin_deleted_tombstones', JSON.stringify(Array.from(localTombstones)));
+      } catch {}
 
       if (cloudLinks.length > 0) {
-        // Merge cloud links with local cache, giving priority to assigned links
-        const mergedMap = new Map<string, LinkRecord>();
+        // Cloud is authoritative! Filter out any tombstoned items
+        const authoritativeLinks = cloudLinks.filter(
+          (l) => !localTombstones.has(l.slug.toLowerCase()) && (!l.id || !localTombstones.has(l.id.toLowerCase()))
+        );
 
-        // First put local links
-        for (const l of allLinks) {
-          mergedMap.set(l.slug.toLowerCase(), l);
-        }
+        // Update localDb cache with authoritative cloud data so offline fallback is identical
+        localDb.importBackup({ version: '1.0', exportDate: new Date().toISOString(), links: authoritativeLinks });
 
-        // Overwrite / merge with cloud links
-        for (const c of cloudLinks) {
-          const key = c.slug.toLowerCase();
-          const existing = mergedMap.get(key);
-          if (!existing) {
-            mergedMap.set(key, c);
-          } else {
-            // Keep the assigned destination if either has it
-            if (c.destinationUrl && c.isAssigned) {
-              mergedMap.set(key, { ...existing, ...c, isAssigned: true });
-            } else if (existing.destinationUrl && existing.isAssigned) {
-              // Local was assigned, sync up to cloud!
-              firestoreDb.assignBatchLink(existing.slug, {
-                destinationUrl: existing.destinationUrl,
-                title: existing.title,
-              }).catch(() => {});
-              mergedMap.set(key, existing);
-            } else {
-              mergedMap.set(key, { ...existing, ...c });
-            }
-          }
-        }
-
-        allLinks = Array.from(mergedMap.values());
-        // Save merged data into localDb cache
-        localDb.importBackup({ version: '1.0', exportDate: new Date().toISOString(), links: allLinks });
-      } else if (allLinks.length > 0) {
-        // If Firestore is empty (first time run), seed local links into Firestore!
-        for (const link of allLinks) {
-          firestoreDb.assignBatchLink(link.slug, {
-            destinationUrl: link.destinationUrl,
-            title: link.title,
-            description: link.description,
-          }).catch(() => {});
-        }
+        const totalClicks = authoritativeLinks.reduce((sum, l) => sum + (l.totalClicks || 0), 0);
+        return { links: authoritativeLinks, totalLinks: authoritativeLinks.length, totalClicks };
       }
     } catch (err) {
       console.warn('Firestore sync warning:', err);
     }
 
-    // 2. Also try server sync if server is running
-    try {
-      const url = ownerId ? `/api/links?ownerId=${encodeURIComponent(ownerId)}` : '/api/links';
-      const res = await fetch(url);
-      const serverData = await parseJsonResponse(res);
-      if (serverData !== null && res.ok && Array.isArray(serverData.links)) {
-        for (const sLink of serverData.links) {
-          const idx = allLinks.findIndex((l) => l.slug.toLowerCase() === sLink.slug.toLowerCase());
-          if (idx === -1) {
-            allLinks.push(sLink);
-          } else if (sLink.destinationUrl && sLink.isAssigned) {
-            allLinks[idx] = { ...allLinks[idx], ...sLink };
-          }
-        }
-      }
-    } catch {}
+    // 2. Fallback to local cache if Firestore is offline
+    const localData = await localDb.getLinks(ownerId);
+    const filteredLocal = localData.links.filter(
+      (l) => !localTombstones.has(l.slug.toLowerCase()) && (!l.id || !localTombstones.has(l.id.toLowerCase()))
+    );
 
-    const totalClicks = allLinks.reduce((sum, l) => sum + (l.totalClicks || 0), 0);
-    return { links: allLinks, totalLinks: allLinks.length, totalClicks };
+    const totalClicks = filteredLocal.reduce((sum, l) => sum + (l.totalClicks || 0), 0);
+    return { links: filteredLocal, totalLinks: filteredLocal.length, totalClicks };
   },
 
   // Manual Direct Cloud Sync (Used in Profile modal)
@@ -255,11 +264,34 @@ export const api = {
     return localDb.updateLink(id, payload);
   },
 
-  async deleteLink(id: string): Promise<boolean> {
+  /**
+   * Delete link permanently across ALL devices:
+   * 1. Firestore delete + tombstone in deleted_links
+   * 2. Server.ts Express route DELETE
+   * 3. Local browser localStorage purge + tombstone cache
+   */
+  async deleteLink(idOrSlug: string): Promise<boolean> {
+    const clean = idOrSlug.trim().toLowerCase().replace(/^\/r\//, '').replace(/^\//, '');
+
+    // Add to local tombstones immediately
+    addLocalTombstone(clean);
+
+    // 1. Delete in Cloud Firestore and register cross-device tombstone
     try {
-      await firestoreDb.deleteLink(id);
+      await firestoreDb.deleteLink(clean);
+    } catch (e) {
+      console.warn('Firestore deleteLink error:', e);
+    }
+
+    // 2. Delete on Express server
+    try {
+      await fetch(`/api/links/${encodeURIComponent(clean)}`, {
+        method: 'DELETE',
+      });
     } catch {}
-    return localDb.deleteLink(id);
+
+    // 3. Delete in localDb
+    return localDb.deleteLink(clean);
   },
 
   async getLinkAnalytics(id: string): Promise<LinkAnalytics> {

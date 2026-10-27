@@ -10,6 +10,9 @@ import { BatchPrintPage } from './components/BatchPrintPage';
 import { AuthPage } from './components/AuthPage';
 import { ClientRedirectHandler } from './components/ClientRedirectHandler';
 import { ProfileBackupModal } from './components/ProfileBackupModal';
+import { CameraQRScannerModal } from './components/CameraQRScannerModal';
+import { LinkAnalyticsModal } from './components/LinkAnalyticsModal';
+import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { LinkRecord, GlobalOverview, UserRecord } from './types';
 import { api } from './services/api';
@@ -54,6 +57,7 @@ export default function App() {
   });
 
   const [activeTab, setActiveTab] = useState<'links' | 'batch-print' | 'print'>('links');
+
   // Dynamic redirect slug detection for Netlify SPA deployments
   const [redirectSlug] = useState<string | null>(() => {
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/r/')) {
@@ -62,27 +66,28 @@ export default function App() {
     }
     return null;
   });
+
+  // App data state
   const [links, setLinks] = useState<LinkRecord[]>([]);
   const [overview, setOverview] = useState<GlobalOverview | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [activeQRLink, setActiveQRLink] = useState<LinkRecord | null>(null);
   const [activeEditLink, setActiveEditLink] = useState<LinkRecord | null>(null);
+  const [activeQRLink, setActiveQRLink] = useState<LinkRecord | null>(null);
   const [selectedPrintLink, setSelectedPrintLink] = useState<LinkRecord | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [analyticsLink, setAnalyticsLink] = useState<LinkRecord | null>(null);
 
-  // Toasts
+  // Toast notification state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const addToast = (type: 'success' | 'error' | 'info', message: string) => {
-    const id = `toast_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`;
+    const id = Date.now().toString() + Math.random().toString(36).substring(2, 5);
     setToasts((prev) => [...prev, { id, type, message }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4500);
   };
 
   const removeToast = (id: string) => {
@@ -91,16 +96,13 @@ export default function App() {
 
   const loadData = async (user = currentUser) => {
     if (!user) return;
-
     try {
       setLoading(true);
       setError(null);
-
       const [linksData, overviewData] = await Promise.all([
-        api.getLinks(),
-        api.getOverview(),
+        api.getLinks(user.role === 'admin' ? undefined : user.id),
+        api.getOverview(user.role === 'admin' ? undefined : user.id),
       ]);
-
       setLinks(linksData.links);
       setOverview(overviewData);
     } catch (err: any) {
@@ -140,27 +142,32 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    // Only remove user session tokens so database is safe in local storage
-    localStorage.removeItem('dynamicqr_user');
     localStorage.removeItem('dynamicqr_token');
+    localStorage.removeItem('dynamicqr_user');
     setCurrentUser(null);
     setLinks([]);
     setOverview(null);
-    setIsProfileModalOpen(false);
   };
 
-  const handleCreateLink = async (payload: any) => {
+  const handleCreateLink = async (payload: {
+    title: string;
+    destinationUrl: string;
+    customSlug?: string;
+    description?: string;
+    tags?: string[];
+    qrSettings?: any;
+  }) => {
     try {
-      const ownerPayload = {
+      const newLink = await api.createLink({
         ...payload,
         ownerId: currentUser?.id,
         ownerEmail: currentUser?.email,
         ownerName: currentUser?.name,
-      };
-
-      const newLink = await api.createLink(ownerPayload);
-      addToast('success', `Dynamic link "/r/${newLink.slug}" created. QR code is ready for print.`);
+      });
+      addToast('success', `Dynamic link "/r/${newLink.slug}" created successfully.`);
       await loadData();
+      setIsCreateOpen(false);
+      setActiveQRLink(newLink);
     } catch (err: any) {
       addToast('error', err.message || 'Failed to create link');
       throw err;
@@ -173,11 +180,9 @@ export default function App() {
   ) => {
     try {
       await api.updateLink(id, updates);
-      addToast(
-        'success',
-        'Destination updated! Physical QR codes and short links route to the new target immediately.'
-      );
+      addToast('success', 'Destination target updated instantly.');
       await loadData();
+      setActiveEditLink(null);
     } catch (err: any) {
       addToast('error', err.message || 'Failed to update destination');
       throw err;
@@ -186,32 +191,27 @@ export default function App() {
 
   const handleToggleStatus = async (link: LinkRecord) => {
     try {
-      const nextStatus = !link.isActive;
-      await api.updateLink(link.id, { isActive: nextStatus });
-      addToast(
-        'info',
-        nextStatus
-          ? `Link "/r/${link.slug}" is now Active and redirecting.`
-          : `Link "/r/${link.slug}" is paused. Scanners will see a pause notice.`
-      );
+      await api.updateLink(link.id, { isActive: !link.isActive });
+      addToast('info', `Link status set to ${!link.isActive ? 'Active' : 'Paused'}.`);
       await loadData();
     } catch (err: any) {
-      addToast('error', err.message || 'Failed to update status');
+      addToast('error', err.message || 'Failed to change link status');
     }
   };
 
   const handleDeleteLink = async (id: string) => {
-    const target = links.find((l) => l.id === id);
+    const target = links.find((l) => l.id === id || l.slug === id);
     if (!target) return;
-
     if (
       window.confirm(
-        `Are you sure you want to delete "${target.title}" (/r/${target.slug})? Any printed QR codes will stop redirecting.`
+        `Are you sure you want to delete "${target.title}" (/r/${target.slug})? It will be permanently removed across all devices.`
       )
     ) {
       try {
-        await api.deleteLink(id);
-        addToast('info', `Link "/r/${target.slug}" deleted.`);
+        // Immediate local state purge
+        setLinks((prev) => prev.filter((l) => l.id !== target.id && l.slug !== target.slug));
+        await api.deleteLink(target.id);
+        addToast('info', `Link "/r/${target.slug}" deleted permanently across all devices.`);
         await loadData();
       } catch (err: any) {
         addToast('error', err.message || 'Failed to delete link');
@@ -224,7 +224,7 @@ export default function App() {
     return <ClientRedirectHandler slug={redirectSlug} />;
   }
 
-  // If not logged in, render the Administrator Sign-In page (Zero exposed credentials)
+  // If not logged in, render the Administrator Sign-In page
   if (!currentUser) {
     return (
       <div className={darkMode ? 'dark' : ''}>
@@ -249,7 +249,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 flex flex-col font-sans transition-colors">
-      {/* Top Bar Header with Bold Typography & Dark Theme Toggle */}
+      {/* Top Bar Header */}
       <Header
         user={currentUser}
         activeTab={activeTab}
@@ -259,9 +259,10 @@ export default function App() {
         onToggleDarkMode={toggleDarkMode}
         onLogout={handleLogout}
         onOpenProfileModal={() => setIsProfileModalOpen(true)}
+        onOpenScanner={() => setIsScannerOpen(true)}
       />
 
-      {/* Main Container - Mobile Optimized Padding */}
+      {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-4 sm:space-y-8">
         {loading && links.length === 0 ? (
           <div className="py-24 text-center space-y-4">
@@ -329,8 +330,10 @@ export default function App() {
             {activeTab === 'batch-print' && (
               <BatchPrintPage
                 links={links}
+                currentUser={currentUser}
                 onRefreshLinks={() => loadData(currentUser)}
                 onDeleteLink={handleDeleteLink}
+                onOpenScanner={() => setIsScannerOpen(true)}
               />
             )}
 
@@ -367,6 +370,30 @@ export default function App() {
         onDeleteQR={handleDeleteLink}
       />
 
+      {/* In-App Mobile Camera Scanner Modal */}
+      <CameraQRScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        links={links}
+        onOpenAssign={(link) => {
+          setActiveEditLink(link);
+        }}
+        onOpenEdit={(link) => {
+          setActiveEditLink(link);
+        }}
+        onOpenAnalytics={(linkId) => {
+          const l = links.find((item) => item.id === linkId || item.slug === linkId);
+          if (l) setAnalyticsLink(l);
+        }}
+      />
+
+      {/* Detailed Analytics Modal */}
+      <LinkAnalyticsModal
+        link={analyticsLink}
+        isOpen={!!analyticsLink}
+        onClose={() => setAnalyticsLink(null)}
+      />
+
       {/* Admin Profile & Data Backup Modal */}
       <ProfileBackupModal
         isOpen={isProfileModalOpen}
@@ -377,6 +404,9 @@ export default function App() {
         onRefreshData={() => loadData(currentUser)}
         onAddToast={addToast}
       />
+
+      {/* PWA 1-Tap Home Screen Install Banner */}
+      <PWAInstallBanner />
 
       {/* Floating Notifications */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />

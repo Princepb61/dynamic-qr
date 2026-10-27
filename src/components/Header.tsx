@@ -1,5 +1,5 @@
 import React from 'react';
-import { QrCode, Sun, Moon, LogOut, Shield, User, HardDrive } from 'lucide-react';
+import { QrCode, Sun, Moon, LogOut, Shield, Camera, Smartphone } from 'lucide-react';
 import { UserRecord } from '../types';
 
 interface HeaderProps {
@@ -11,6 +11,7 @@ interface HeaderProps {
   onToggleDarkMode: () => void;
   onLogout: () => void;
   onOpenProfileModal?: () => void;
+  onOpenScanner?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -22,6 +23,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleDarkMode,
   onLogout,
   onOpenProfileModal,
+  onOpenScanner,
 }) => {
   return (
     <header className="border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 sticky top-0 z-30 transition-colors">
@@ -53,7 +55,6 @@ export const Header: React.FC<HeaderProps> = ({
           >
             Dynamic Links
           </button>
-
           {/* Dedicated Pre-Printed Multi-QR Print & Assign Tab */}
           <button
             onClick={() => setActiveTab('batch-print')}
@@ -70,7 +71,6 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             )}
           </button>
-
           {/* Clean Single A4 Print Tab */}
           <button
             onClick={() => setActiveTab('print')}
@@ -84,8 +84,20 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </nav>
 
-        {/* Zone 3: Dark Mode Toggle, Profile & Backup Modal Trigger, Sign Out */}
+        {/* Zone 3: Quick Scan Camera, Dark Mode Toggle, Profile & Sign Out */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          {/* Quick Scan Camera Button */}
+          {onOpenScanner && (
+            <button
+              onClick={onOpenScanner}
+              title="Open Quick QR Camera Scanner"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition-all shadow-xs active:scale-95"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Scan QR</span>
+            </button>
+          )}
+
           {/* Dark Mode Theme Toggle */}
           <button
             onClick={onToggleDarkMode}
@@ -128,7 +140,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Mobile Phone Navigation Bar (Thumb-friendly touch targets) */}
-      <div className="md:hidden grid grid-cols-3 px-2 py-1.5 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 text-xs font-bold gap-1">
+      <div className="md:hidden grid grid-cols-4 px-2 py-1.5 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 text-xs font-bold gap-1">
         <button
           onClick={() => setActiveTab('links')}
           className={`py-2 px-1 rounded-lg text-center transition-all min-h-[38px] flex items-center justify-center truncate ${
@@ -139,7 +151,6 @@ export const Header: React.FC<HeaderProps> = ({
         >
           Links
         </button>
-
         <button
           onClick={() => setActiveTab('batch-print')}
           className={`py-2 px-1 rounded-lg text-center transition-all min-h-[38px] flex items-center justify-center gap-1 truncate ${
@@ -148,14 +159,13 @@ export const Header: React.FC<HeaderProps> = ({
               : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'
           }`}
         >
-          <span>Multi-QR</span>
+          <span>Batch</span>
           {unassignedCount > 0 && (
             <span className="px-1.5 py-0.5 bg-indigo-600 text-white rounded-full text-[10px] leading-none">
               {unassignedCount}
             </span>
           )}
         </button>
-
         <button
           onClick={() => setActiveTab('print')}
           className={`py-2 px-1 rounded-lg text-center transition-all min-h-[38px] flex items-center justify-center truncate ${
@@ -166,6 +176,15 @@ export const Header: React.FC<HeaderProps> = ({
         >
           A4 Print
         </button>
+        {onOpenScanner && (
+          <button
+            onClick={onOpenScanner}
+            className="py-2 px-1 rounded-lg text-center transition-all min-h-[38px] flex items-center justify-center gap-1 text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20"
+          >
+            <Camera className="w-3.5 h-3.5" />
+            <span>Scan</span>
+          </button>
+        )}
       </div>
     </header>
   );

@@ -7,6 +7,12 @@ service cloud.firestore {
       allow write: if true;
     }
 
+    // Batches collection: Cross-device unassigned QR batches
+    match /batches/{batchId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // Clicks analytics collection: Scan telemetry
     match /clicks/{clickId} {
       allow read: if true;

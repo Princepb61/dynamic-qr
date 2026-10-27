@@ -464,3 +464,227 @@ export async function shareOrSaveMultiQRA4(
   await downloadMultiQRA4Image(links, cols, batchName);
   return 'downloaded';
 }
+
+import { LabelPresetType } from '../types';
+
+export interface LabelPresetDefinition {
+  id: LabelPresetType;
+  name: string;
+  badge: string;
+  dimensions: string;
+  description: string;
+  pageCss: string;
+  itemCss: string;
+  qrSize: number;
+}
+
+export const LABEL_PRESETS: Record<LabelPresetType, LabelPresetDefinition> = {
+  a4_grid: {
+    id: 'a4_grid',
+    name: 'A4 Multi-Sticker Sheet',
+    badge: 'Standard',
+    dimensions: '210 × 297 mm (Sheet Grid)',
+    description: 'Print 12, 24, or 30 peel-off QR stickers on a standard A4 sticker paper sheet.',
+    pageCss: '@page { size: A4 portrait; margin: 8mm; }',
+    itemCss: 'display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6px;',
+    qrSize: 180,
+  },
+  square_sticker: {
+    id: 'square_sticker',
+    name: 'Square Sticker Label',
+    badge: 'Retail & Jars',
+    dimensions: '50 × 50 mm (2" × 2")',
+    description: 'Square adhesive sticker for food containers, product tags, retail packages, or table corners.',
+    pageCss: '@page { size: 50mm 50mm; margin: 0; }',
+    itemCss: 'width: 50mm; height: 50mm; page-break-after: always; display: flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; padding: 3mm;',
+    qrSize: 140,
+  },
+  business_card: {
+    id: 'business_card',
+    name: 'Table Standee / Card',
+    badge: 'Restaurants',
+    dimensions: '89 × 51 mm (3.5" × 2")',
+    description: 'Standard business card size for acrylic table stands, counter inserts, and bill presentation cards.',
+    pageCss: '@page { size: 89mm 51mm landscape; margin: 0; }',
+    itemCss: 'width: 89mm; height: 51mm; page-break-after: always; display: flex; flex-direction: row; align-items: center; justify-content: space-around; box-sizing: border-box; padding: 4mm;',
+    qrSize: 130,
+  },
+  thermal_2in: {
+    id: 'thermal_2in',
+    name: '2" Thermal Receipt (58mm)',
+    badge: 'POS Thermal',
+    dimensions: '58 mm Roll Continuous',
+    description: 'Direct thermal roll for ESC/POS 58mm mobile Bluetooth and counter printers. High contrast black & white.',
+    pageCss: '@page { size: 58mm auto; margin: 0; }',
+    itemCss: 'width: 54mm; margin: 0 auto 6mm auto; page-break-after: always; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3mm 0;',
+    qrSize: 150,
+  },
+  thermal_3in: {
+    id: 'thermal_3in',
+    name: '3" Thermal Receipt (80mm)',
+    badge: 'POS Thermal',
+    dimensions: '80 mm Roll Continuous',
+    description: 'Standard 80mm commercial thermal printers (Epson, Star, Sunmi, Xprinter) with high scan clarity.',
+    pageCss: '@page { size: 80mm auto; margin: 0; }',
+    itemCss: 'width: 72mm; margin: 0 auto 8mm auto; page-break-after: always; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4mm 0;',
+    qrSize: 190,
+  },
+  shelf_tag: {
+    id: 'shelf_tag',
+    name: 'Mini Shelf / Asset Tag',
+    badge: 'Compact',
+    dimensions: '30 × 20 mm',
+    description: 'Miniature label for shelf edges, electronic asset tags, product barcodes, and small item standees.',
+    pageCss: '@page { size: 30mm 20mm landscape; margin: 0; }',
+    itemCss: 'width: 30mm; height: 20mm; page-break-after: always; display: flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; padding: 1mm;',
+    qrSize: 55,
+  },
+};
+
+/**
+ * Clean Print engine supporting custom label sizes and thermal receipt rolls
+ */
+export async function printLabelPresetBatch(
+  links: Array<{ slug: string; title?: string }>,
+  presetType: LabelPresetType = 'a4_grid',
+  batchName: string = 'batch'
+): Promise<void> {
+  const preset = LABEL_PRESETS[presetType] || LABEL_PRESETS.a4_grid;
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+
+  // Generate data URLs for all QRs in the batch
+  const qrDataUrls: Array<{ slug: string; last4: string; dataUrl: string }> = [];
+  for (const link of links) {
+    const fullUrl = `${baseUrl}/r/${link.slug}`;
+    const dataUrl = await QRCode.toDataURL(fullUrl, {
+      width: preset.qrSize * 2,
+      margin: 1,
+      color: { dark: '#000000', light: '#ffffff' },
+      errorCorrectionLevel: 'H',
+    });
+    qrDataUrls.push({
+      slug: link.slug,
+      last4: getLast4Letters(link.slug),
+      dataUrl,
+    });
+  }
+
+  let htmlItems = '';
+  if (presetType === 'business_card') {
+    htmlItems = qrDataUrls
+      .map(
+        (item) => `
+      <div class="label-item">
+        <img src="${item.dataUrl}" style="width: ${preset.qrSize}px; height: ${preset.qrSize}px;" />
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+          <div style="font-size: 11px; text-transform: uppercase; font-family: sans-serif; letter-spacing: 1px; color: #555;">Scan to Connect</div>
+          <div style="font-size: 26px; font-weight: 900; font-family: monospace; letter-spacing: 3px; color: #000; margin-top: 4px;">${item.last4}</div>
+          <div style="font-size: 9px; font-family: monospace; color: #888; margin-top: 2px;">/r/${item.slug}</div>
+        </div>
+      </div>
+    `
+      )
+      .join('');
+  } else if (presetType === 'shelf_tag') {
+    htmlItems = qrDataUrls
+      .map(
+        (item) => `
+      <div class="label-item">
+        <img src="${item.dataUrl}" style="width: ${preset.qrSize}px; height: ${preset.qrSize}px;" />
+        <div style="font-size: 10px; font-weight: 900; font-family: monospace; letter-spacing: 1px; color: #000;">${item.last4}</div>
+      </div>
+    `
+      )
+      .join('');
+  } else if (presetType === 'a4_grid') {
+    htmlItems = `
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12mm 8mm; width: 100%;">
+        ${qrDataUrls
+          .map(
+            (item) => `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px dashed #cbd5e1; padding: 8px 4px; border-radius: 8px; box-sizing: border-box;">
+            <img src="${item.dataUrl}" style="width: 140px; height: 140px; display: block;" />
+            <div style="font-size: 18px; font-weight: 900; font-family: monospace; letter-spacing: 2px; color: #000; margin-top: 4px;">${item.last4}</div>
+          </div>
+        `
+          )
+          .join('')}
+      </div>
+    `;
+  } else {
+    // Thermal roll & Square sticker
+    htmlItems = qrDataUrls
+      .map(
+        (item) => `
+      <div class="label-item">
+        <img src="${item.dataUrl}" style="width: ${preset.qrSize}px; height: ${preset.qrSize}px; display: block;" />
+        <div style="font-size: 20px; font-weight: 900; font-family: monospace; letter-spacing: 2px; color: #000; margin-top: 4px;">${item.last4}</div>
+      </div>
+    `
+      )
+      .join('');
+  }
+
+  const printHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Print - ${batchName} (${preset.name})</title>
+  <style>
+    ${preset.pageCss}
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      color: #000000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .label-item {
+      ${preset.itemCss}
+    }
+    @media print {
+      body {
+        margin: 0;
+        padding: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  ${htmlItems}
+</body>
+</html>`;
+
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow?.document;
+  if (doc) {
+    doc.open();
+    doc.write(printHtml);
+    doc.close();
+    iframe.onload = () => {
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } catch {
+          window.print();
+        }
+        setTimeout(() => {
+          try {
+            document.body.removeChild(iframe);
+          } catch {}
+        }, 3000);
+      }, 300);
+    };
+  } else {
+    window.print();
+  }
+}

@@ -43,12 +43,33 @@
         "deletedAt": { "type": "string" }
       },
       "required": ["slug"]
+    },
+    "Batch": {
+      "title": "Batch",
+      "description": "Unassigned pre-printed QR code batch collection synced across devices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "prefix": { "type": "string" },
+        "count": { "type": "number" },
+        "labelPreset": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "ownerEmail": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "unassignedCount": { "type": "number" }
+      },
+      "required": ["id", "name", "ownerId"]
     }
   },
   "firestore": {
     "/links/{linkId}": {
       "schema": "Link",
       "description": "Global collection of dynamic short links and pre-printed QR assignments"
+    },
+    "/batches/{batchId}": {
+      "schema": "Batch",
+      "description": "Cross-device synced pre-printed QR batches"
     },
     "/clicks/{clickId}": {
       "schema": "Click",
