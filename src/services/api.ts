@@ -223,6 +223,12 @@ export const api = {
     ownerId?: string;
     ownerEmail?: string;
     ownerName?: string;
+    quantity?: number;
+    contentType?: any;
+    presentationMode?: any;
+    vcardData?: any;
+    wifiData?: any;
+    reviewGate?: any;
     qrSettings?: {
       colorDark?: string;
       colorLight?: string;
@@ -230,7 +236,44 @@ export const api = {
       margin?: number;
     };
   }): Promise<LinkRecord> {
-    // 1. Cloud Firestore
+    const qty = Math.min(Math.max(payload.quantity || 1, 1), 250);
+
+    // If multiple quantity, create sequentially
+    if (qty > 1) {
+      const createdList: LinkRecord[] = [];
+      const baseTitle = payload.title || 'Dynamic QR';
+      for (let i = 1; i <= qty; i++) {
+        const itemSlug = payload.customSlug
+          ? `${payload.customSlug}-${i}-${Math.random().toString(36).substring(2, 5)}`
+          : undefined;
+        const itemRecord = await this.createLink({
+          ...payload,
+          title: `${baseTitle} #${i}`,
+          customSlug: itemSlug,
+          quantity: 1,
+        });
+        createdList.push(itemRecord);
+      }
+      return createdList[0];
+    }
+
+    // 1. Express backend sync if reachable
+    try {
+      const res = await fetch('/api/links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await parseJsonResponse(res);
+      if (res.ok && data) {
+        // Also save to Firestore & localDb
+        await firestoreDb.createLink(data).catch(() => {});
+        localDb.importBackup({ version: '1.0', exportDate: new Date().toISOString(), links: [data] });
+        return data;
+      }
+    } catch {}
+
+    // 2. Cloud Firestore
     try {
       const created = await firestoreDb.createLink(payload);
       localDb.importBackup({ version: '1.0', exportDate: new Date().toISOString(), links: [created] });
@@ -239,7 +282,7 @@ export const api = {
       console.warn('Firestore createLink fallback:', e);
     }
 
-    // 2. Local fallback
+    // 3. Local fallback
     return localDb.createLink(payload);
   },
 

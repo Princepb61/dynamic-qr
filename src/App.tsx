@@ -11,6 +11,7 @@ import { AuthPage } from './components/AuthPage';
 import { ClientRedirectHandler } from './components/ClientRedirectHandler';
 import { ProfileBackupModal } from './components/ProfileBackupModal';
 import { CameraQRScannerModal } from './components/CameraQRScannerModal';
+import { CustomerFeedbackModal } from './components/CustomerFeedbackModal';
 import { LinkAnalyticsModal } from './components/LinkAnalyticsModal';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { ToastContainer, ToastMessage } from './components/Toast';
@@ -56,7 +57,7 @@ export default function App() {
     }
   });
 
-  const [activeTab, setActiveTab] = useState<'links' | 'batch-print' | 'print'>('links');
+  const [activeTab, setActiveTab] = useState<'links' | 'batch-print'>('links');
 
   // Dynamic redirect slug detection for Netlify SPA deployments
   const [redirectSlug] = useState<string | null>(() => {
@@ -81,6 +82,8 @@ export default function App() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [analyticsLink, setAnalyticsLink] = useState<LinkRecord | null>(null);
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+  const [feedbackBadgeCount, setFeedbackBadgeCount] = useState(0);
 
   // Toast notification state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -105,6 +108,18 @@ export default function App() {
       ]);
       setLinks(linksData.links);
       setOverview(overviewData);
+
+      // Fetch feedback count for badge
+      try {
+        const feedbackRes = await fetch('/api/feedback/list');
+        if (feedbackRes.ok) {
+          const feedbackData = await feedbackRes.json();
+          const unreadCount = (feedbackData.feedbacks || []).filter((f: any) => f.status === 'new').length;
+          setFeedbackBadgeCount(unreadCount);
+        }
+      } catch (e) {
+        // Ignore feedback badge fetch error
+      }
     } catch (err: any) {
       console.error('Data loading error:', err);
       setError(err.message || 'Failed to connect to backend server');
@@ -156,6 +171,12 @@ export default function App() {
     description?: string;
     tags?: string[];
     qrSettings?: any;
+    quantity?: number;
+    contentType?: any;
+    presentationMode?: any;
+    vcardData?: any;
+    wifiData?: any;
+    reviewGate?: any;
   }) => {
     try {
       const newLink = await api.createLink({
@@ -164,10 +185,15 @@ export default function App() {
         ownerEmail: currentUser?.email,
         ownerName: currentUser?.name,
       });
-      addToast('success', `Dynamic link "/r/${newLink.slug}" created successfully.`);
+      const qty = payload.quantity || 1;
+      if (qty > 1) {
+        addToast('success', `Created ${qty} dynamic QR codes successfully.`);
+      } else {
+        addToast('success', `Dynamic link "/r/${newLink.slug}" created successfully.`);
+        setActiveQRLink(newLink);
+      }
       await loadData();
       setIsCreateOpen(false);
-      setActiveQRLink(newLink);
     } catch (err: any) {
       addToast('error', err.message || 'Failed to create link');
       throw err;
@@ -260,6 +286,8 @@ export default function App() {
         onLogout={handleLogout}
         onOpenProfileModal={() => setIsProfileModalOpen(true)}
         onOpenScanner={() => setIsScannerOpen(true)}
+        onOpenFeedbackInbox={() => setIsFeedbackModalOpen(true)}
+        feedbackBadgeCount={feedbackBadgeCount}
       />
 
       {/* Main Container */}
@@ -314,10 +342,7 @@ export default function App() {
                     links={links}
                     onOpenQR={(link) => setActiveQRLink(link)}
                     onOpenEdit={(link) => setActiveEditLink(link)}
-                    onOpenPrint={(link) => {
-                      setSelectedPrintLink(link);
-                      setActiveTab('print');
-                    }}
+                    onOpenPrint={(link) => setActiveQRLink(link)}
                     onDeleteLink={handleDeleteLink}
                     onToggleStatus={handleToggleStatus}
                     onOpenCreate={() => setIsCreateOpen(true)}
@@ -334,15 +359,6 @@ export default function App() {
                 onRefreshLinks={() => loadData(currentUser)}
                 onDeleteLink={handleDeleteLink}
                 onOpenScanner={() => setIsScannerOpen(true)}
-              />
-            )}
-
-            {/* View 3: QR Print Center (Single Cards & Display Sheets) */}
-            {activeTab === 'print' && (
-              <QRPrintCenter
-                links={links}
-                selectedLink={selectedPrintLink}
-                onSelectLink={(link) => setSelectedPrintLink(link)}
               />
             )}
           </>
@@ -403,6 +419,16 @@ export default function App() {
         onLogout={handleLogout}
         onRefreshData={() => loadData(currentUser)}
         onAddToast={addToast}
+      />
+
+      {/* Intercepted Customer Feedback & AI Reply Assistant Modal */}
+      <CustomerFeedbackModal
+        isOpen={isFeedbackModalOpen}
+        onClose={() => {
+          setIsFeedbackModalOpen(false);
+          loadData();
+        }}
+        userRole={currentUser.role}
       />
 
       {/* PWA 1-Tap Home Screen Install Banner */}

@@ -62,7 +62,45 @@ export interface LinkRecord {
     animation?: string;
     showQRBadge?: boolean;
   };
-  presentationMode?: 'instant_redirect' | 'button_page';
+  presentationMode?: 'instant_redirect' | 'button_page' | 'review_gate';
+  reviewGate?: {
+    enabled: boolean;
+    businessName?: string;
+    businessCategory?: string;
+    googleReviewUrl: string;
+    minRatingForGoogle: number;
+    praiseTags: string[];
+    customTone?: string;
+  };
+  conditionalRouting?: {
+    enabled: boolean;
+    rules: Array<{
+      id: string;
+      label: string;
+      type: 'time' | 'device_os';
+      timeStart?: string;
+      timeEnd?: string;
+      daysOfWeek?: number[];
+      targetOs?: 'ios' | 'android' | 'desktop' | 'other';
+      destinationUrl: string;
+    }>;
+    fallbackUrl?: string;
+  };
+}
+
+export interface ReviewFeedbackRecord {
+  id: string;
+  linkId: string;
+  slug: string;
+  rating: number;
+  customerName?: string;
+  customerContact?: string;
+  feedbackText: string;
+  tags?: string[];
+  createdAt: string;
+  status: 'new' | 'reviewed' | 'resolved';
+  ownerReply?: string;
+  ownerRepliedAt?: string;
 }
 
 export interface ClickRecord {
@@ -84,6 +122,7 @@ interface DatabaseSchema {
   users: UserRecord[];
   links: LinkRecord[];
   clicks: ClickRecord[];
+  feedback: ReviewFeedbackRecord[];
 }
 
 const DATA_DIR = path.resolve(__dirname, 'data');
@@ -334,7 +373,7 @@ function getInitialData(): DatabaseSchema {
     }
   });
 
-  return { users: getDefaultUsers(), links: initialLinks, clicks: clickSamples };
+  return { users: getDefaultUsers(), links: initialLinks, clicks: clickSamples, feedback: [] };
 }
 
 function loadDatabase(): DatabaseSchema {
@@ -375,6 +414,9 @@ function loadDatabase(): DatabaseSchema {
       }
       if (!data.clicks || !Array.isArray(data.clicks)) {
         data.clicks = [];
+      }
+      if (!data.feedback || !Array.isArray(data.feedback)) {
+        data.feedback = [];
       }
 
       return data;
@@ -638,14 +680,44 @@ async function startServer() {
 
     // Determine target URL and handle query pass-through
     let target = link.destinationUrl;
-    if (!target.startsWith('http://') && !target.startsWith('https://')) {
+    if (target && !target.startsWith('http://') && !target.startsWith('https://')) {
       target = 'https://' + target;
+    }
+
+    // Evaluate Smart Conditional Routing (Time Window & Device OS)
+    if (link.conditionalRouting?.enabled && link.conditionalRouting.rules?.length) {
+      const now = new Date();
+      const currentHours = now.getHours().toString().padStart(2, '0');
+      const currentMinutes = now.getMinutes().toString().padStart(2, '0');
+      const currentTime = `${currentHours}:${currentMinutes}`;
+      const currentDay = now.getDay();
+      const osLower = os.toLowerCase();
+      const isIos = osLower.includes('ios') || osLower.includes('iphone') || osLower.includes('ipad');
+      const isAndroid = osLower.includes('android');
+      const detectedOs: 'ios' | 'android' | 'desktop' | 'other' = isIos ? 'ios' : isAndroid ? 'android' : devType === 'desktop' ? 'desktop' : 'other';
+
+      for (const rule of link.conditionalRouting.rules) {
+        if (rule.type === 'time') {
+          const matchDay = !rule.daysOfWeek || rule.daysOfWeek.length === 0 || rule.daysOfWeek.includes(currentDay);
+          if (matchDay && rule.timeStart && rule.timeEnd) {
+            if (currentTime >= rule.timeStart && currentTime <= rule.timeEnd) {
+              target = rule.destinationUrl.startsWith('http') ? rule.destinationUrl : `https://${rule.destinationUrl}`;
+              break;
+            }
+          }
+        } else if (rule.type === 'device_os') {
+          if (rule.targetOs && rule.targetOs === detectedOs) {
+            target = rule.destinationUrl.startsWith('http') ? rule.destinationUrl : `https://${rule.destinationUrl}`;
+            break;
+          }
+        }
+      }
     }
 
     // Preserve any search parameters passed to the short link (e.g. ?utm_campaign=xyz)
     try {
       const incomingUrl = new URL(req.originalUrl, `http://${req.headers.host || 'localhost'}`);
-      const targetUrlObj = new URL(target);
+      const targetUrlObj = new URL(target || 'https://taplocal.in');
       incomingUrl.searchParams.forEach((value, key) => {
         if (key !== 'slug') {
           targetUrlObj.searchParams.set(key, value);
@@ -654,6 +726,289 @@ async function startServer() {
       target = targetUrlObj.toString();
     } catch (e) {
       // Ignore query merge errors and use target as is
+    }
+
+    // If Review Gatekeeper presentation mode is enabled
+    if ((link.presentationMode === 'review_gate' || link.reviewGate?.enabled) && req.query.direct !== '1') {
+      const reviewGate = link.reviewGate || {
+        enabled: true,
+        businessName: link.title,
+        businessCategory: 'Local Business',
+        googleReviewUrl: target,
+        minRatingForGoogle: 4,
+        praiseTags: ['⚡ Fast Service', '😊 Friendly Staff', '✨ Clean & Welcoming', '💎 Great Value'],
+      };
+
+      const bName = escapeHtml(reviewGate.businessName || link.title);
+      const bCat = escapeHtml(reviewGate.businessCategory || 'Local Business');
+      const gUrl = escapeHtml(reviewGate.googleReviewUrl || target);
+      const tagsJson = JSON.stringify(reviewGate.praiseTags || []);
+
+      return res.send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${bName} - Experience Review</title>
+          <script src="https://cdn.tailwindcss.com"></script>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+          <style>
+            body { font-family: 'Plus Jakarta Sans', sans-serif; }
+            .font-mono { font-family: 'JetBrains Mono', monospace; }
+            .star-btn svg { transition: transform 0.2s, fill 0.2s, color 0.2s; }
+            .star-btn:hover svg, .star-btn.active svg { transform: scale(1.15); }
+          </style>
+        </head>
+        <body class="bg-neutral-950 text-neutral-100 min-h-screen flex flex-col justify-between p-4 sm:p-6 antialiased selection:bg-amber-500 selection:text-neutral-950">
+          <div class="max-w-md w-full mx-auto my-auto space-y-6">
+            <!-- Brand Header -->
+            <div class="text-center space-y-2">
+              <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold uppercase tracking-wider">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                <span>Verified Customer Experience</span>
+              </div>
+              <h1 class="text-2xl sm:text-3xl font-black text-white tracking-tight">${bName}</h1>
+              <p class="text-xs sm:text-sm text-neutral-400">How was your visit with us today?</p>
+            </div>
+
+            <!-- Main Interactive Rating Card -->
+            <div class="bg-neutral-900/90 border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl text-center space-y-6">
+              <!-- Star selector -->
+              <div id="starContainer" class="flex justify-center items-center gap-2 sm:gap-3 py-2">
+                ${[1, 2, 3, 4, 5].map(s => `
+                  <button type="button" data-star="${s}" class="star-btn p-1 focus:outline-none transition-transform active:scale-90" aria-label="Rate ${s} stars">
+                    <svg class="w-9 h-9 sm:w-11 sm:h-11 text-neutral-700 transition-colors" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                    </svg>
+                  </button>
+                `).join('')}
+              </div>
+              <p id="starPrompt" class="text-xs text-neutral-500 font-medium">Tap a star above to rate your experience</p>
+
+              <!-- HIGH RATING (4-5 STARS) -> AI GOOGLE REVIEW GENERATOR -->
+              <div id="highRatingSection" class="hidden pt-2 border-t border-neutral-800/80 space-y-5 text-left">
+                <div class="text-center space-y-1">
+                  <span class="text-2xl">🌟</span>
+                  <h3 class="text-base font-bold text-white">We're so glad you had a great experience!</h3>
+                  <p class="text-xs text-neutral-400">Select what you enjoyed, and our AI will generate a personalized 5-star Google review draft for you in 1 second.</p>
+                </div>
+
+                <!-- Tags -->
+                <div class="space-y-2">
+                  <label class="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">What stood out to you?</label>
+                  <div id="praiseTagsContainer" class="flex flex-wrap gap-1.5"></div>
+                </div>
+
+                <!-- Specific note input -->
+                <div class="space-y-1.5">
+                  <label class="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 flex justify-between">
+                    <span>Anything special you'd like to mention?</span>
+                    <span class="text-neutral-500 lowercase">(optional)</span>
+                  </label>
+                  <input id="customNoteInput" type="text" placeholder="e.g. coffee quality, prompt seating, friendly server..." class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-amber-500" />
+                </div>
+
+                <!-- Generate with AI Button -->
+                <button id="generateReviewBtn" type="button" class="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-neutral-950 font-bold text-xs sm:text-sm shadow-lg shadow-amber-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>
+                  <span>Generate 5-Star Review with AI</span>
+                </button>
+
+                <!-- Drafts Container -->
+                <div id="draftsContainer" class="space-y-3 hidden"></div>
+
+                <!-- Direct bypass -->
+                <div class="pt-2 text-center">
+                  <a href="${gUrl}" target="_blank" class="text-xs text-neutral-400 hover:text-white underline underline-offset-4">
+                    Or write your own review directly on Google ↗
+                  </a>
+                </div>
+              </div>
+
+              <!-- LOW RATING (1-3 STARS) -> PRIVATE OWNER FEEDBACK GATE -->
+              <div id="lowRatingSection" class="hidden pt-2 border-t border-neutral-800/80 space-y-4 text-left">
+                <div class="space-y-1">
+                  <div class="flex items-center gap-1.5 text-amber-400 text-xs font-semibold">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 12h6M12 9v6"/></svg>
+                    <span>Direct Private Channel to Management</span>
+                  </div>
+                  <h3 class="text-base font-bold text-white">We're so sorry your visit didn't meet expectations.</h3>
+                  <p class="text-xs text-neutral-400">Please tell us what went wrong so management can personally make it right for you.</p>
+                </div>
+
+                <div class="space-y-1.5">
+                  <label class="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">What happened? *</label>
+                  <textarea id="complaintInput" rows="3" placeholder="Tell us about the wait time, service, or food..." class="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-amber-500"></textarea>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                  <input id="custNameInput" type="text" placeholder="Your Name (optional)" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-white text-xs placeholder-neutral-600" />
+                  <input id="custContactInput" type="text" placeholder="Email or Phone" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-white text-xs placeholder-neutral-600" />
+                </div>
+
+                <button id="sendFeedbackBtn" type="button" class="w-full py-3 px-4 rounded-xl bg-white hover:bg-neutral-100 text-neutral-950 font-bold text-xs shadow-lg transition-all">
+                  Send Private Feedback to Owner
+                </button>
+
+                <div id="feedbackThanks" class="hidden p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 text-center space-y-2">
+                  <p class="text-xs text-emerald-300 font-bold">Thank you for letting us know directly!</p>
+                  <p class="text-[11px] text-neutral-400">Your message has been sent directly to the manager's priority inbox and we will follow up with you promptly.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="text-center text-[11px] text-neutral-600">
+              Protected by <span class="text-neutral-400 font-semibold">TapLocal Review Gatekeeper</span>
+            </div>
+          </div>
+
+          <script>
+            const praiseTags = ${tagsJson};
+            const businessName = ${JSON.stringify(reviewGate.businessName || link.title)};
+            const businessCategory = ${JSON.stringify(reviewGate.businessCategory || 'Local Business')};
+            const googleUrl = ${JSON.stringify(reviewGate.googleReviewUrl || target)};
+            const slug = ${JSON.stringify(link.slug)};
+
+            let currentRating = 0;
+            let selectedTags = praiseTags.slice(0, 2);
+
+            // Render tags
+            const tagsCont = document.getElementById('praiseTagsContainer');
+            praiseTags.forEach(t => {
+              const b = document.createElement('button');
+              b.type = 'button';
+              b.className = 'text-xs px-3 py-1.5 rounded-full font-medium border transition-colors ' +
+                (selectedTags.includes(t) ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700/60');
+              b.innerText = t;
+              b.onclick = () => {
+                if (selectedTags.includes(t)) {
+                  selectedTags = selectedTags.filter(item => item !== t);
+                  b.className = 'text-xs px-3 py-1.5 rounded-full font-medium border bg-neutral-800/60 text-neutral-400 border-neutral-700/60';
+                } else {
+                  selectedTags.push(t);
+                  b.className = 'text-xs px-3 py-1.5 rounded-full font-medium border bg-amber-500/20 text-amber-300 border-amber-500/50';
+                }
+              };
+              tagsCont.appendChild(b);
+            });
+
+            // Star clicks
+            const starBtns = document.querySelectorAll('.star-btn');
+            starBtns.forEach(btn => {
+              btn.onclick = () => {
+                const s = parseInt(btn.getAttribute('data-star'), 10);
+                currentRating = s;
+                starBtns.forEach(b => {
+                  const val = parseInt(b.getAttribute('data-star'), 10);
+                  const svg = b.querySelector('svg');
+                  if (val <= s) {
+                    svg.setAttribute('class', 'w-9 h-9 sm:w-11 sm:h-11 text-amber-400 fill-amber-400');
+                  } else {
+                    svg.setAttribute('class', 'w-9 h-9 sm:w-11 sm:h-11 text-neutral-700 fill-transparent');
+                  }
+                });
+
+                document.getElementById('starPrompt').classList.add('hidden');
+                if (s >= 4) {
+                  document.getElementById('highRatingSection').classList.remove('hidden');
+                  document.getElementById('lowRatingSection').classList.add('hidden');
+                } else {
+                  document.getElementById('lowRatingSection').classList.remove('hidden');
+                  document.getElementById('highRatingSection').classList.add('hidden');
+                }
+              };
+            });
+
+            // AI Review Generation
+            const genBtn = document.getElementById('generateReviewBtn');
+            const draftsCont = document.getElementById('draftsContainer');
+            genBtn.onclick = async () => {
+              genBtn.disabled = true;
+              genBtn.innerHTML = '<span>Gemini AI is generating 3 drafts...</span>';
+              try {
+                const res = await fetch('/api/ai/generate-review', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    businessName,
+                    businessCategory,
+                    praiseTags: selectedTags,
+                    customNotes: document.getElementById('customNoteInput').value,
+                  })
+                });
+                const data = await res.json();
+                const reviews = data.reviews || [];
+                draftsCont.innerHTML = '';
+                reviews.forEach(draft => {
+                  const card = document.createElement('div');
+                  card.className = 'p-4 rounded-2xl bg-neutral-950/80 border border-neutral-800 space-y-2.5 text-left';
+                  card.innerHTML = \`
+                    <div class="flex items-center justify-between">
+                      <span class="text-[11px] font-bold uppercase tracking-wider text-amber-400">\${draft.title}</span>
+                      <span class="text-amber-400 text-xs">★★★★★</span>
+                    </div>
+                    <p class="text-xs text-neutral-300 italic">"\${draft.text}"</p>
+                    <button type="button" class="copy-btn w-full py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border border-neutral-700">
+                      <span>Copy & Post on Google Reviews ↗</span>
+                    </button>
+                  \`;
+                  const copyBtn = card.querySelector('.copy-btn');
+                  copyBtn.onclick = async () => {
+                    await navigator.clipboard.writeText(draft.text);
+                    copyBtn.className = 'w-full py-2.5 px-3 rounded-xl bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors';
+                    copyBtn.innerText = 'Copied! Opening Google Reviews in 1s...';
+                    setTimeout(() => {
+                      window.location.href = googleUrl;
+                    }, 1200);
+                  };
+                  draftsCont.appendChild(card);
+                });
+                draftsCont.classList.remove('hidden');
+              } catch (e) {
+                alert('Review drafts generated. Opening Google Reviews.');
+                window.location.href = googleUrl;
+              } finally {
+                genBtn.disabled = false;
+                genBtn.innerHTML = '<span>Generate 5-Star Review with AI</span>';
+              }
+            };
+
+            // Low rating submission
+            const sendBtn = document.getElementById('sendFeedbackBtn');
+            sendBtn.onclick = async () => {
+              const text = document.getElementById('complaintInput').value.trim();
+              if (!text) {
+                alert('Please let us know what went wrong.');
+                return;
+              }
+              sendBtn.disabled = true;
+              sendBtn.innerText = 'Sending to management...';
+              try {
+                await fetch('/api/feedback/submit', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    slug,
+                    rating: currentRating,
+                    customerName: document.getElementById('custNameInput').value.trim(),
+                    customerContact: document.getElementById('custContactInput').value.trim(),
+                    feedbackText: text,
+                    tags: selectedTags,
+                  })
+                });
+                document.getElementById('feedbackThanks').classList.remove('hidden');
+                sendBtn.classList.add('hidden');
+              } catch (e) {
+                document.getElementById('feedbackThanks').classList.remove('hidden');
+              }
+            };
+          </script>
+        </body>
+        </html>
+      `);
     }
 
     // If Dynamic Button Page presentation mode is enabled (and not bypassed by ?direct=1)
@@ -966,7 +1321,7 @@ async function startServer() {
   // 1. Generate Batch of Pre-Printed / Unassigned QR Codes
   app.post('/api/batch-qr/generate', (req: Request, res: Response) => {
     const { batchName = 'Batch QR Stock', prefix = 'qr', count = 12, ownerId, ownerEmail, ownerName } = req.body;
-    const num = Math.min(Math.max(parseInt(count, 10) || 12, 1), 60);
+    const num = Math.min(Math.max(parseInt(count, 10) || 12, 1), 250);
 
     const db = loadDatabase();
     const batchId = `batch_${Date.now()}`;
@@ -1021,25 +1376,25 @@ async function startServer() {
 
   // 2. Direct Mobile Activation (Used when scanning unassigned QR code with phone)
   app.post('/api/batch-qr/direct-activate', (req: Request, res: Response) => {
-    let { slug, destinationUrl, title, adminPassword } = req.body;
+    let {
+      slug,
+      destinationUrl,
+      title,
+      adminPassword,
+      contentType,
+      presentationMode,
+      vcardData,
+      wifiData,
+      reviewGate,
+    } = req.body;
 
     if (!adminPassword || adminPassword !== 'P4prince.com') {
       return res.status(401).json({ error: 'Invalid admin verification password. Please use P4prince.com' });
     }
 
-    if (!destinationUrl || typeof destinationUrl !== 'string') {
-      return res.status(400).json({ error: 'Valid destination URL is required.' });
-    }
-
-    destinationUrl = destinationUrl.trim();
-    if (!destinationUrl.startsWith('http://') && !destinationUrl.startsWith('https://')) {
-      destinationUrl = 'https://' + destinationUrl;
-    }
-
-    try {
-      new URL(destinationUrl);
-    } catch {
-      return res.status(400).json({ error: 'Please enter a valid web URL (e.g. https://example.com).' });
+    let target = (destinationUrl || '').trim();
+    if (target && !target.startsWith('http://') && !target.startsWith('https://') && !target.startsWith('data:') && !target.startsWith('WIFI:')) {
+      target = 'https://' + target;
     }
 
     const db = loadDatabase();
@@ -1049,10 +1404,15 @@ async function startServer() {
       return res.status(404).json({ error: 'QR Code not found.' });
     }
 
-    link.destinationUrl = destinationUrl;
+    link.destinationUrl = target;
     link.isAssigned = true;
     link.isActive = true;
     if (title && title.trim()) link.title = title.trim();
+    if (contentType) link.contentType = contentType;
+    if (presentationMode) link.presentationMode = presentationMode;
+    if (vcardData) link.vcardData = vcardData;
+    if (wifiData) link.wifiData = wifiData;
+    if (reviewGate) link.reviewGate = reviewGate;
     link.updatedAt = new Date().toISOString();
 
     saveDatabase(db);
@@ -1062,21 +1422,20 @@ async function startServer() {
   // 3. Assign Link via Admin Panel or Scan
   app.put('/api/batch-qr/:id/assign', (req: Request, res: Response) => {
     const { id } = req.params;
-    let { destinationUrl, title, description } = req.body;
+    let {
+      destinationUrl,
+      title,
+      description,
+      contentType,
+      presentationMode,
+      vcardData,
+      wifiData,
+      reviewGate,
+    } = req.body;
 
-    if (!destinationUrl || typeof destinationUrl !== 'string') {
-      return res.status(400).json({ error: 'Destination URL is required.' });
-    }
-
-    destinationUrl = destinationUrl.trim();
-    if (!destinationUrl.startsWith('http://') && !destinationUrl.startsWith('https://')) {
-      destinationUrl = 'https://' + destinationUrl;
-    }
-
-    try {
-      new URL(destinationUrl);
-    } catch {
-      return res.status(400).json({ error: 'Invalid URL format.' });
+    let target = (destinationUrl || '').trim();
+    if (target && !target.startsWith('http://') && !target.startsWith('https://') && !target.startsWith('data:') && !target.startsWith('WIFI:')) {
+      target = 'https://' + target;
     }
 
     const db = loadDatabase();
@@ -1089,10 +1448,15 @@ async function startServer() {
         id: `link_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         slug: cleanKey,
         title: title?.trim() || `QR Code (${cleanKey})`,
-        destinationUrl,
+        destinationUrl: target,
         description: description?.trim() || 'Assigned via mobile scan',
         isActive: true,
         isAssigned: true,
+        contentType: contentType || 'url',
+        presentationMode: presentationMode || 'instant_redirect',
+        vcardData,
+        wifiData,
+        reviewGate,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         tags: ['Assigned', 'Mobile Scan'],
@@ -1103,11 +1467,16 @@ async function startServer() {
       };
       db.links.unshift(link);
     } else {
-      link.destinationUrl = destinationUrl;
+      link.destinationUrl = target;
       link.isAssigned = true;
       link.isActive = true;
       if (title && title.trim()) link.title = title.trim();
       if (description && description.trim()) link.description = description.trim();
+      if (contentType) link.contentType = contentType;
+      if (presentationMode) link.presentationMode = presentationMode;
+      if (vcardData) link.vcardData = vcardData;
+      if (wifiData) link.wifiData = wifiData;
+      if (reviewGate) link.reviewGate = reviewGate;
       link.updatedAt = new Date().toISOString();
     }
 
@@ -1168,7 +1537,7 @@ async function startServer() {
     });
   });
 
-  // 2. Create new dynamic link
+  // 2. Create new dynamic link(s) (supports custom quantity and unassigned reservation)
   app.post('/api/links', (req: Request, res: Response) => {
     let {
       title,
@@ -1183,80 +1552,151 @@ async function startServer() {
       contentType,
       dynamicButton,
       presentationMode,
+      vcardData,
+      wifiData,
+      reviewGate,
+      quantity = 1,
     } = req.body;
 
-    if (!destinationUrl || typeof destinationUrl !== 'string') {
-      return res.status(400).json({ error: 'Valid destination URL is required.' });
-    }
-
-    destinationUrl = destinationUrl.trim();
-    if (!destinationUrl.startsWith('http://') && !destinationUrl.startsWith('https://')) {
-      destinationUrl = 'https://' + destinationUrl;
-    }
-
-    try {
-      new URL(destinationUrl);
-    } catch {
-      return res.status(400).json({ error: 'Please enter a valid destination URL (e.g., https://example.com).' });
-    }
-
+    const count = Math.min(Math.max(parseInt(quantity, 10) || 1, 1), 250);
     const db = loadDatabase();
 
-    let slug = customSlug ? customSlug.trim().toLowerCase() : '';
-    if (slug) {
-      slug = slug.replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-      if (slug.length < 2) {
-        return res.status(400).json({ error: 'Custom slug must be at least 2 characters long.' });
+    let target = (destinationUrl || '').trim();
+    const hasTarget = Boolean(target);
+    if (hasTarget) {
+      if (!target.startsWith('http://') && !target.startsWith('https://') && !target.startsWith('data:') && !target.startsWith('WIFI:')) {
+        target = 'https://' + target;
       }
-      if (db.links.some((l) => l.slug.toLowerCase() === slug.toLowerCase())) {
-        return res.status(409).json({ error: `The slug "${slug}" is already in use. Please pick another one.` });
-      }
-    } else {
-      const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
-      let candidate = '';
-      let attempts = 0;
-      do {
-        candidate = '';
-        for (let i = 0; i < 6; i++) {
-          candidate += alphabet[Math.floor(Math.random() * alphabet.length)];
+      try {
+        if (!target.startsWith('data:') && !target.startsWith('WIFI:')) {
+          new URL(target);
         }
-        attempts++;
-      } while (db.links.some((l) => l.slug === candidate) && attempts < 20);
-      slug = candidate;
+      } catch {
+        return res.status(400).json({ error: 'Please enter a valid destination URL (e.g., https://example.com).' });
+      }
     }
 
-    const newRecord: LinkRecord = {
-      id: `link_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      slug,
-      title: title?.trim() || `Link /r/${slug}`,
-      destinationUrl,
-      description: description?.trim() || '',
-      isActive: true,
-      contentType: contentType || 'url',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      tags: Array.isArray(tags) ? tags : [],
-      totalClicks: 0,
-      ownerId: ownerId || 'usr_admin_1',
-      ownerEmail: ownerEmail || 'p0667500@gmail.com',
-      ownerName: ownerName || 'Administrator',
-      qrSettings: {
-        colorDark: qrSettings?.colorDark || '#0f172a',
-        colorLight: qrSettings?.colorLight || '#ffffff',
-        errorCorrectionLevel: qrSettings?.errorCorrectionLevel || 'H',
-        margin: typeof qrSettings?.margin === 'number' ? qrSettings.margin : 2,
-        frameStyle: qrSettings?.frameStyle,
-        frameText: qrSettings?.frameText,
-        centerIcon: qrSettings?.centerIcon,
-      },
-      dynamicButton: dynamicButton && typeof dynamicButton === 'object' ? dynamicButton : undefined,
-      presentationMode: presentationMode === 'button_page' ? 'button_page' : 'instant_redirect',
-    };
+    const createdRecords: LinkRecord[] = [];
+    const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
 
-    db.links.unshift(newRecord);
+    for (let i = 1; i <= count; i++) {
+      let slug = '';
+      if (count === 1 && customSlug) {
+        slug = customSlug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+        if (slug.length < 2) {
+          return res.status(400).json({ error: 'Custom slug must be at least 2 characters long.' });
+        }
+        if (db.links.some((l) => l.slug.toLowerCase() === slug.toLowerCase())) {
+          return res.status(409).json({ error: `The slug "${slug}" is already in use. Please pick another one.` });
+        }
+      } else if (count > 1 && customSlug) {
+        const baseSlug = customSlug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+        slug = `${baseSlug}-${i}-${Math.random().toString(36).substring(2, 5)}`;
+      } else {
+        let attempts = 0;
+        do {
+          slug = '';
+          for (let j = 0; j < 6; j++) {
+            slug += alphabet[Math.floor(Math.random() * alphabet.length)];
+          }
+          attempts++;
+        } while (db.links.some((l) => l.slug === slug) && attempts < 20);
+      }
+
+      const itemTitle = count > 1
+        ? `${title?.trim() || 'Dynamic QR'} #${i}`
+        : title?.trim() || (hasTarget ? `Link /r/${slug}` : `Reserved QR #${slug.toUpperCase()}`);
+
+      const recordTags = Array.isArray(tags) ? [...tags] : [];
+      if (!hasTarget && !recordTags.includes('Unassigned')) {
+        recordTags.push('Unassigned');
+      }
+
+      const newRecord: LinkRecord = {
+        id: `link_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+        slug,
+        title: itemTitle,
+        destinationUrl: target,
+        description: description?.trim() || (!hasTarget ? 'Reserved unassigned QR code' : ''),
+        isActive: true,
+        isAssigned: hasTarget,
+        contentType: contentType || (hasTarget ? 'url' : 'url'),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tags: recordTags,
+        totalClicks: 0,
+        ownerId: ownerId || 'usr_admin_1',
+        ownerEmail: ownerEmail || 'p0667500@gmail.com',
+        ownerName: ownerName || 'Administrator',
+        qrSettings: {
+          colorDark: qrSettings?.colorDark || '#0f172a',
+          colorLight: qrSettings?.colorLight || '#ffffff',
+          errorCorrectionLevel: qrSettings?.errorCorrectionLevel || 'H',
+          margin: typeof qrSettings?.margin === 'number' ? qrSettings.margin : 2,
+          frameStyle: qrSettings?.frameStyle,
+          frameText: qrSettings?.frameText,
+          centerIcon: qrSettings?.centerIcon,
+        },
+        dynamicButton: dynamicButton && typeof dynamicButton === 'object' ? dynamicButton : undefined,
+        presentationMode: presentationMode || (reviewGate?.enabled ? 'review_gate' : 'instant_redirect'),
+        vcardData,
+        wifiData,
+        reviewGate,
+      };
+
+      createdRecords.push(newRecord);
+      db.links.unshift(newRecord);
+    }
+
     saveDatabase(db);
 
-    res.status(201).json(newRecord);
+    if (count === 1) {
+      res.status(201).json(createdRecords[0]);
+    } else {
+      res.status(201).json({
+        success: true,
+        message: `Successfully created ${createdRecords.length} dynamic QR codes.`,
+        links: createdRecords,
+        count: createdRecords.length,
+      });
+    }
+  });
+
+  // vCard direct .vcf download route
+  app.get('/api/vcard/:slug.vcf', (req: Request, res: Response) => {
+    const { slug } = req.params;
+    const db = loadDatabase();
+    const clean = slug.replace(/\.vcf$/i, '').toLowerCase();
+    const link = db.links.find((l) => l.slug.toLowerCase() === clean);
+
+    if (!link || !link.vcardData) {
+      return res.status(404).send('vCard not found');
+    }
+
+    const d = link.vcardData;
+    const nameParts = (d.fullName || link.title).trim().split(' ');
+    const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
+    const firstName = nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : (d.fullName || link.title).trim();
+
+    const vcfLines = [
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      `N:${lastName};${firstName};;;`,
+      `FN:${d.fullName || link.title}`,
+    ];
+    if (d.organization) vcfLines.push(`ORG:${d.organization}`);
+    if (d.title) vcfLines.push(`TITLE:${d.title}`);
+    if (d.phone) vcfLines.push(`TEL;TYPE=CELL,VOICE:${d.phone}`);
+    if (d.email) vcfLines.push(`EMAIL;TYPE=INTERNET,PREF:${d.email}`);
+    if (d.website) vcfLines.push(`URL:${d.website}`);
+    if (d.address) vcfLines.push(`ADR;TYPE=WORK:;;${d.address};;;;`);
+    vcfLines.push('NOTE:Saved via TapLocal Dynamic QR Contact');
+    vcfLines.push('END:VCARD');
+
+    const vcfContent = vcfLines.join('\r\n');
+    res.setHeader('Content-Type', 'text/vcard; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${clean}-contact.vcf"`);
+    res.send(vcfContent);
   });
 
   // 3. Edit dynamic link destination
@@ -1512,6 +1952,174 @@ async function startServer() {
     } catch (err: any) {
       return res.status(500).json({ error: err.message || 'QR generation error' });
     }
+  });
+
+  // -------------------------------------------------------------
+  // AI CUSTOM GOOGLE REVIEWS & FEEDBACK INTERCEPT ENDPOINTS
+  // -------------------------------------------------------------
+
+  // 1. AI 5-Star Google Review Generator (Powered by Gemini 3.8 Flash)
+  app.post('/api/ai/generate-review', async (req: Request, res: Response) => {
+    const { businessName = 'Local Business', businessCategory = 'Service', praiseTags = [], customNotes = '', tone = 'enthusiastic' } = req.body;
+
+    const tagsText = Array.isArray(praiseTags) && praiseTags.length > 0 ? praiseTags.join(', ') : 'great service, friendly team';
+
+    // Best-in-class fallback drafts in case API key is absent or offline
+    const fallbackReviews = [
+      {
+        id: 1,
+        title: 'Quick & Enthusiastic',
+        text: `Had a wonderful experience at ${businessName}! The service was top notch and everything exceeded my expectations. Key highlights: ${tagsText}. Absolutely 5 stars!`,
+      },
+      {
+        id: 2,
+        title: 'Detailed Highlights',
+        text: `I recently visited ${businessName} and couldn't be happier. From start to finish, the staff were attentive, the atmosphere was wonderful, and the quality was outstanding. Definitely worth checking out!`,
+      },
+      {
+        id: 3,
+        title: 'Staff & Experience Shoutout',
+        text: `Five stars for ${businessName}! What stood out most was how welcoming and professional everyone was (${tagsText}). Will definitely be returning and recommending to others!`,
+      },
+    ];
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.json({ reviews: fallbackReviews });
+    }
+
+    try {
+      const prompt = `You are a genuine local customer writing an authentic, positive 5-star Google review for "${businessName}" (${businessCategory}).
+Customer highlights and loved aspects: ${tagsText}.
+Specific details mentioned by customer: ${customNotes || 'none'}.
+Desired tone: ${tone}.
+
+Generate exactly 3 varied, natural-sounding, human Google review draft options that avoid generic AI clichés:
+Option 1: Short & punchy (2-3 sentences)
+Option 2: Detailed and descriptive (3-5 sentences)
+Option 3: Warm personal shoutout focusing on staff and overall atmosphere (2-4 sentences)
+
+Respond ONLY with valid JSON in this exact structure:
+{
+  "reviews": [
+    { "id": 1, "title": "Quick & Enthusiastic", "text": "..." },
+    { "id": 2, "title": "Detailed Highlights", "text": "..." },
+    { "id": 3, "title": "Staff & Atmosphere", "text": "..." }
+  ]
+}`;
+
+      const aiResponse = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        },
+      });
+
+      const responseText = aiResponse.text?.trim() || '';
+      try {
+        const parsed = JSON.parse(responseText);
+        if (parsed.reviews && Array.isArray(parsed.reviews)) {
+          return res.json(parsed);
+        }
+      } catch (err) {
+        console.warn('Failed to parse Gemini JSON output, using fallback:', err);
+      }
+
+      return res.json({ reviews: fallbackReviews });
+    } catch (err: any) {
+      console.error('Gemini generate review error:', err);
+      return res.json({ reviews: fallbackReviews });
+    }
+  });
+
+  // 2. AI Owner Reply Assistant (Empathetic De-escalation & Resolution)
+  app.post('/api/ai/draft-reply', async (req: Request, res: Response) => {
+    const { customerFeedback, customerName = 'Guest', rating = 2, tone = 'compassionate' } = req.body;
+
+    const fallbackReply = `Dear ${customerName},\n\nThank you for reaching out and sharing your honest feedback with us. I am truly sorry to hear that your recent experience fell short of the high standards we pride ourselves on. We take your comments seriously and are already addressing this with our team. I would love the opportunity to connect with you directly to make this right. Please feel free to call or reply so we can ensure your next visit is nothing short of exceptional.\n\nWarm regards,\nManagement Team`;
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.json({ reply: fallbackReply });
+    }
+
+    try {
+      const prompt = `You are the caring owner or general manager of a local business.
+A customer gave a ${rating}-star private rating with the following feedback:
+"${customerFeedback || 'Customer had an issue with service and timing.'}"
+Customer Name: ${customerName}.
+Desired tone: ${tone} (empathetic, professional, accountable, de-escalating, offering direct personal resolution).
+
+Draft a heartfelt, professional owner response that acknowledges their frustration sincerely, apologizes without sounding defensive, explains that their feedback was shared with leadership, and invites them to contact management directly to make things right.`;
+
+      const aiResponse = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+      });
+
+      const replyText = aiResponse.text?.trim() || fallbackReply;
+      return res.json({ reply: replyText });
+    } catch (err: any) {
+      console.error('Gemini draft reply error:', err);
+      return res.json({ reply: fallbackReply });
+    }
+  });
+
+  // 3. Submit Customer Feedback
+  app.post('/api/feedback/submit', (req: Request, res: Response) => {
+    const { slug, rating, customerName, customerContact, feedbackText, tags } = req.body;
+
+    if (!feedbackText || !feedbackText.trim()) {
+      return res.status(400).json({ error: 'Feedback text is required.' });
+    }
+
+    const db = loadDatabase();
+    const link = db.links.find((l) => l.slug.toLowerCase() === (slug || '').toLowerCase());
+
+    const newFeedback: ReviewFeedbackRecord = {
+      id: `fb_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      linkId: link?.id || 'unknown',
+      slug: slug || 'general',
+      rating: Number(rating) || 3,
+      customerName: customerName?.trim() || '',
+      customerContact: customerContact?.trim() || '',
+      feedbackText: feedbackText.trim(),
+      tags: Array.isArray(tags) ? tags : [],
+      createdAt: new Date().toISOString(),
+      status: 'new',
+    };
+
+    if (!db.feedback) db.feedback = [];
+    db.feedback.unshift(newFeedback);
+    saveDatabase(db);
+
+    res.status(201).json({ success: true, feedback: newFeedback });
+  });
+
+  // 4. List Feedback Records
+  app.get('/api/feedback/list', (req: Request, res: Response) => {
+    const db = loadDatabase();
+    res.json({ feedbacks: db.feedback || [] });
+  });
+
+  // 5. Save Owner Reply to Feedback
+  app.post('/api/feedback/reply', (req: Request, res: Response) => {
+    const { id, ownerReply, status = 'resolved' } = req.body;
+
+    if (!id) return res.status(400).json({ error: 'Feedback ID is required.' });
+
+    const db = loadDatabase();
+    const record = (db.feedback || []).find((f) => f.id === id);
+
+    if (!record) {
+      return res.status(404).json({ error: 'Feedback record not found.' });
+    }
+
+    record.ownerReply = ownerReply?.trim() || '';
+    record.status = status as any;
+    record.ownerRepliedAt = new Date().toISOString();
+
+    saveDatabase(db);
+    res.json({ success: true, feedback: record });
   });
 
   // -------------------------------------------------------------

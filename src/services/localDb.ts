@@ -370,7 +370,7 @@ export const localDb = {
     return { success: true, batchId, batchName: payload.batchName, count, links: newLinks };
   },
 
-  async assignBatchLink(idOrSlug: string, payload: { destinationUrl: string; title?: string }) {
+  async assignBatchLink(idOrSlug: string, payload: Partial<LinkRecord> & { destinationUrl: string; title?: string }) {
     const db = loadDb();
     const clean = idOrSlug.trim().toLowerCase().replace('/r/', '').replace('/', '');
     let link = db.links.find((l) => l.id === idOrSlug || l.slug.toLowerCase() === clean);
@@ -397,11 +397,11 @@ export const localDb = {
           errorCorrectionLevel: 'H',
           margin: 2,
         },
+        ...payload,
       };
       db.links.unshift(link);
     } else {
-      link.destinationUrl = payload.destinationUrl;
-      if (payload.title) link.title = payload.title;
+      Object.assign(link, payload);
       link.isAssigned = true;
       link.updatedAt = new Date().toISOString();
     }

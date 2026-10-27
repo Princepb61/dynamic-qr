@@ -143,13 +143,13 @@ export const firestoreDb = {
    */
   async assignBatchLink(
     slugOrId: string,
-    payload: { destinationUrl: string; title?: string; description?: string }
+    payload: Partial<LinkRecord> & { destinationUrl: string; title?: string; description?: string }
   ): Promise<LinkRecord> {
     const clean = slugOrId.trim().toLowerCase().replace(/^\/r\//, '').replace(/^\//, '');
     let existing = await this.getLinkBySlug(clean);
 
     let target = payload.destinationUrl.trim();
-    if (!target.startsWith('http://') && !target.startsWith('https://')) {
+    if (!target.startsWith('http://') && !target.startsWith('https://') && !target.startsWith('data:') && !target.startsWith('WIFI:')) {
       target = 'https://' + target;
     }
 
@@ -157,6 +157,7 @@ export const firestoreDb = {
     const record: LinkRecord = existing
       ? {
           ...existing,
+          ...payload,
           destinationUrl: target,
           title: payload.title?.trim() || existing.title,
           description: payload.description?.trim() || existing.description || 'Assigned via mobile scan',
@@ -185,6 +186,7 @@ export const firestoreDb = {
             errorCorrectionLevel: 'H',
             margin: 2,
           },
+          ...payload,
         };
 
     // Save to Firestore using clean slug as doc ID for instant O(1) lookup
