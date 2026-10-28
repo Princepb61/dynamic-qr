@@ -1,6 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { LinkRecord, ReviewGateConfig, ConditionalRoutingConfig, ConditionalRule, QRSettings } from '../types';
-import { X, ShieldCheck, Sparkles, Star, Clock, Smartphone, Plus, Trash2, Palette, Globe, Layers } from 'lucide-react';
+import {
+  LinkRecord,
+  ReviewGateConfig,
+  QRSettings,
+  HubActionItem,
+  MultiActionHubConfig,
+  HubActionType,
+} from '../types';
+import {
+  X,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  Plus,
+  Trash2,
+  Palette,
+  Globe,
+  Layers,
+  Phone,
+  MessageCircle,
+  Wifi,
+  User,
+  Utensils,
+  MapPin,
+  Share2,
+  ArrowRight,
+  ExternalLink,
+  Lock,
+} from 'lucide-react';
 import { QRStudioModal } from './QRStudioModal';
 
 interface EditDestinationModalProps {
@@ -10,19 +37,102 @@ interface EditDestinationModalProps {
   onSave: (id: string, updates: Partial<LinkRecord>) => Promise<void>;
 }
 
+const DEFAULT_HUB_ACTIONS: HubActionItem[] = [
+  {
+    id: 'act_review',
+    type: 'google_review',
+    title: 'Write a 5-Star Google Review',
+    subtitle: 'Share your experience with our team',
+    destinationUrl: '',
+    enabled: true,
+  },
+  {
+    id: 'act_whatsapp',
+    type: 'whatsapp',
+    title: 'Chat with Us on WhatsApp',
+    subtitle: 'Direct support & reservations',
+    phone: '',
+    message: 'Hello! I scanned your QR code and would like to ask a question.',
+    enabled: true,
+  },
+  {
+    id: 'act_menu',
+    type: 'menu',
+    title: 'View Digital Menu',
+    subtitle: 'Explore our latest food & drink offerings',
+    destinationUrl: '',
+    enabled: true,
+  },
+  {
+    id: 'act_wifi',
+    type: 'wifi',
+    title: 'Connect to Free Guest Wi-Fi',
+    subtitle: 'One-tap network connection',
+    enabled: false,
+  },
+  {
+    id: 'act_contact',
+    type: 'contact',
+    title: 'Save Business Contact',
+    subtitle: 'Add to phone contacts with 1 tap',
+    enabled: false,
+  },
+  {
+    id: 'act_location',
+    type: 'location',
+    title: 'Get Directions on Google Maps',
+    subtitle: 'Find us easily',
+    address: '',
+    enabled: false,
+  },
+  {
+    id: 'act_website',
+    type: 'website',
+    title: 'Visit Official Website',
+    subtitle: 'Explore services, pricing & specials',
+    destinationUrl: '',
+    enabled: true,
+  },
+  {
+    id: 'act_instagram',
+    type: 'instagram',
+    title: 'Follow Us on Instagram',
+    subtitle: 'Tag us in your photos & stories',
+    handle: '',
+    enabled: false,
+  },
+  {
+    id: 'act_facebook',
+    type: 'facebook',
+    title: 'Like Our Facebook Page',
+    subtitle: 'Stay updated on community news',
+    handle: '',
+    enabled: false,
+  },
+];
+
 export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
   link,
   isOpen,
   onClose,
   onSave,
 }) => {
-  const [activeTab, setActiveTab] = useState<'general' | 'reviews' | 'conditional'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'hub' | 'reviews'>('general');
   const [destinationUrl, setDestinationUrl] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [presentationMode, setPresentationMode] = useState<'instant_redirect' | 'button_page' | 'review_gate'>('instant_redirect');
-  
-  // Review Gatekeeper state
+  const [batchPassword, setBatchPassword] = useState('');
+  const [presentationMode, setPresentationMode] = useState<
+    'instant_redirect' | 'button_page' | 'review_gate' | 'multi_action_hub' | 'vcard_profile' | 'wifi_card'
+  >('instant_redirect');
+
+  // Multi-Action Smart Hub state
+  const [hubEnabled, setHubEnabled] = useState(false);
+  const [hubHeading, setHubHeading] = useState('');
+  const [hubSubheading, setHubSubheading] = useState('');
+  const [hubActions, setHubActions] = useState<HubActionItem[]>(DEFAULT_HUB_ACTIONS);
+
+  // Review & Feedback state
   const [reviewGateEnabled, setReviewGateEnabled] = useState(false);
   const [businessName, setBusinessName] = useState('');
   const [businessCategory, setBusinessCategory] = useState('');
@@ -30,11 +140,9 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
   const [minRating, setMinRating] = useState(4);
   const [praiseTags, setPraiseTags] = useState<string[]>([]);
   const [newTagInput, setNewTagInput] = useState('');
-  const [reviewTone, setReviewTone] = useState<'enthusiastic' | 'friendly' | 'professional' | 'short_and_sweet'>('enthusiastic');
-
-  // Conditional Routing state
-  const [conditionalEnabled, setConditionalEnabled] = useState(false);
-  const [rules, setRules] = useState<ConditionalRule[]>([]);
+  const [reviewTone, setReviewTone] = useState<
+    'enthusiastic' | 'friendly' | 'professional' | 'short_and_sweet'
+  >('friendly');
 
   // QR Studio Modal state
   const [isQRStudioOpen, setIsQRStudioOpen] = useState(false);
@@ -47,7 +155,28 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
       setDestinationUrl(link.destinationUrl || '');
       setTitle(link.title || '');
       setDescription(link.description || '');
-      setPresentationMode(link.presentationMode || (link.reviewGate?.enabled ? 'review_gate' : 'instant_redirect'));
+      setBatchPassword(link.batchPassword || '');
+      setPresentationMode(
+        link.presentationMode ||
+          (link.hubConfig?.enabled
+            ? 'multi_action_hub'
+            : link.reviewGate?.enabled
+            ? 'review_gate'
+            : 'instant_redirect')
+      );
+
+      // Multi-Action Hub setup
+      if (link.hubConfig && Array.isArray(link.hubConfig.actions) && link.hubConfig.actions.length > 0) {
+        setHubEnabled(link.hubConfig.enabled !== false);
+        setHubHeading(link.hubConfig.heading || link.title || '');
+        setHubSubheading(link.hubConfig.subheading || 'Choose an option below');
+        setHubActions(link.hubConfig.actions);
+      } else {
+        setHubEnabled(link.presentationMode === 'multi_action_hub');
+        setHubHeading(link.title || '');
+        setHubSubheading('Tap any option below to get started');
+        setHubActions(DEFAULT_HUB_ACTIONS);
+      }
 
       // Review Gatekeeper
       setReviewGateEnabled(link.reviewGate?.enabled || false);
@@ -60,11 +189,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
           ? link.reviewGate.praiseTags
           : ['Fast Service', 'Friendly Staff', 'Outstanding Quality', 'Clean & Cozy', 'Great Value']
       );
-      setReviewTone(link.reviewGate?.customTone || 'enthusiastic');
-
-      // Conditional Routing
-      setConditionalEnabled(link.conditionalRouting?.enabled || false);
-      setRules(link.conditionalRouting?.rules || []);
+      setReviewTone(link.reviewGate?.customTone || 'friendly');
 
       setError(null);
     }
@@ -84,25 +209,16 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
     setPraiseTags(praiseTags.filter((t) => t !== tagToRemove));
   };
 
-  const handleAddRule = (type: 'time' | 'device_os') => {
-    const newRule: ConditionalRule = {
-      id: `rule_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      label: type === 'time' ? 'Breakfast / Morning Shift' : 'iOS App Store Download',
-      type,
-      timeStart: type === 'time' ? '06:00' : undefined,
-      timeEnd: type === 'time' ? '11:30' : undefined,
-      targetOs: type === 'device_os' ? 'ios' : undefined,
-      destinationUrl: link.destinationUrl || 'https://',
-    };
-    setRules([...rules, newRule]);
+  const handleToggleHubAction = (actionId: string) => {
+    setHubActions((prev) =>
+      prev.map((a) => (a.id === actionId ? { ...a, enabled: a.enabled === false ? true : false } : a))
+    );
   };
 
-  const handleRemoveRule = (ruleId: string) => {
-    setRules(rules.filter((r) => r.id !== ruleId));
-  };
-
-  const handleUpdateRule = (ruleId: string, updates: Partial<ConditionalRule>) => {
-    setRules(rules.map((r) => (r.id === ruleId ? { ...r, ...updates } : r)));
+  const handleUpdateHubAction = (actionId: string, updates: Partial<HubActionItem>) => {
+    setHubActions((prev) =>
+      prev.map((a) => (a.id === actionId ? { ...a, ...updates } : a))
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -110,13 +226,13 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
     setError(null);
 
     let target = destinationUrl.trim();
-    if (!target && !reviewGateEnabled) {
-      setError('Please provide a destination URL.');
-      return;
-    }
-
     if (target && !target.startsWith('http://') && !target.startsWith('https://')) {
       target = 'https://' + target;
+    }
+
+    if (!target && presentationMode === 'instant_redirect') {
+      setError('Please provide a destination URL for instant redirect mode, or select Multi-Action Smart Hub.');
+      return;
     }
 
     const reviewGateConfig: ReviewGateConfig = {
@@ -129,10 +245,11 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
       customTone: reviewTone,
     };
 
-    const conditionalRoutingConfig: ConditionalRoutingConfig = {
-      enabled: conditionalEnabled,
-      rules,
-      fallbackUrl: target,
+    const multiActionHubConfig: MultiActionHubConfig = {
+      enabled: hubEnabled || presentationMode === 'multi_action_hub',
+      heading: hubHeading.trim() || title,
+      subheading: hubSubheading.trim() || 'Choose an option below',
+      actions: hubActions,
     };
 
     try {
@@ -141,9 +258,10 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
         destinationUrl: target,
         title: title.trim() || link.title,
         description: description.trim(),
+        batchPassword: batchPassword.trim() || undefined,
         presentationMode,
         reviewGate: reviewGateConfig,
-        conditionalRouting: conditionalRoutingConfig,
+        hubConfig: multiActionHubConfig,
       });
       onClose();
     } catch (err: any) {
@@ -196,11 +314,11 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex border-b border-neutral-800 bg-neutral-950/40 p-2 gap-1 shrink-0">
+          <div className="flex border-b border-neutral-800 bg-neutral-950/40 p-2 gap-1 shrink-0 overflow-x-auto no-scrollbar">
             {[
               { id: 'general', label: 'Destination & Mode', icon: Globe },
-              { id: 'reviews', label: '⭐ Google Review AI Gate', icon: Sparkles },
-              { id: 'conditional', label: 'Smart Redirects (Time/OS)', icon: Layers },
+              { id: 'hub', label: '🔗 Multi-Action Hub', icon: Layers },
+              { id: 'reviews', label: '⭐ Organic Google AI Reviews', icon: Sparkles },
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -209,7 +327,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                  className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                     isActive
                       ? 'bg-neutral-800 text-white shadow-sm border border-neutral-700'
                       : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40'
@@ -238,35 +356,51 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                   <div>
                     <span className="font-bold text-white block">Printed QR stays 100% active.</span>
                     <p className="text-neutral-400 leading-relaxed font-normal mt-0.5">
-                      No need to re-print table tents or packaging. The link redirects to your updated destination immediately.
+                      No need to re-print stands, stickers or cards. Change where the QR routes anytime.
                     </p>
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-white block">Destination Web URL</label>
+                  <label className="text-xs font-bold text-white block">Primary Destination URL</label>
                   <input
                     type="text"
                     value={destinationUrl}
                     onChange={(e) => setDestinationUrl(e.target.value)}
                     placeholder="https://example.com/menu"
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-white block">Display Title</label>
-                  <input
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="e.g. Dining Table #4 Menu"
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-white block">Display Title</label>
+                    <input
+                      type="text"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="e.g. Dining Table #4 Menu"
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Batch Password (Optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={batchPassword}
+                      onChange={(e) => setBatchPassword(e.target.value)}
+                      placeholder="Staff activation password"
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-white block">Description / Internal Notes</label>
+                  <label className="text-xs font-bold text-white block">Description / Notes</label>
                   <textarea
                     rows={2}
                     value={description}
@@ -283,17 +417,17 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                       {
                         id: 'instant_redirect',
                         title: '⚡ Instant 307',
-                        desc: 'Redirects browser immediately',
+                        desc: 'Redirects browser immediately to primary URL',
+                      },
+                      {
+                        id: 'multi_action_hub',
+                        title: '🔗 Multi-Action Hub',
+                        desc: 'Interactive hub with reviews, WhatsApp, menu & WiFi',
                       },
                       {
                         id: 'review_gate',
-                        title: '⭐ Review Gatekeeper',
-                        desc: 'Filter 5-star Google vs private feedback',
-                      },
-                      {
-                        id: 'button_page',
-                        title: '🔘 Action Landing Page',
-                        desc: 'Branded button screen before target',
+                        title: '⭐ Google Review Mode',
+                        desc: 'Organic category AI reviews & direct feedback',
                       },
                     ].map((mode) => (
                       <button
@@ -301,6 +435,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                         type="button"
                         onClick={() => {
                           setPresentationMode(mode.id as any);
+                          if (mode.id === 'multi_action_hub') setHubEnabled(true);
                           if (mode.id === 'review_gate') setReviewGateEnabled(true);
                         }}
                         className={`p-3 rounded-2xl border text-left transition-all ${
@@ -318,14 +453,179 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
               </div>
             )}
 
-            {/* TAB 2: REVIEW GATEKEEPER & AI 5-STAR REVIEWS */}
+            {/* TAB 2: MULTI-ACTION SMART HUB */}
+            {activeTab === 'hub' && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-indigo-400" />
+                      <span className="text-xs font-bold text-white">Enable Multi-Action Smart Hub</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={hubEnabled || presentationMode === 'multi_action_hub'}
+                        onChange={(e) => {
+                          setHubEnabled(e.target.checked);
+                          if (e.target.checked) setPresentationMode('multi_action_hub');
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-neutral-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                  </div>
+                  <p className="text-xs text-neutral-300">
+                    A single QR code displays an all-in-one smart landing page with direct buttons for reviews, WhatsApp, digital menu, guest Wi-Fi, contact card, location, and social profiles.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-neutral-400">Hub Heading</label>
+                    <input
+                      type="text"
+                      value={hubHeading}
+                      onChange={(e) => setHubHeading(e.target.value)}
+                      placeholder="e.g. Welcome to Bella Trattoria"
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-neutral-400">Subheading</label>
+                    <input
+                      type="text"
+                      value={hubSubheading}
+                      onChange={(e) => setHubSubheading(e.target.value)}
+                      placeholder="e.g. Tap any option below to connect"
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white">Configured Action Buttons</span>
+                    <span className="text-[11px] text-neutral-500">Toggle on/off as needed</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {hubActions.map((action) => {
+                      const isEnabled = action.enabled !== false;
+                      return (
+                        <div
+                          key={action.id}
+                          className={`p-3.5 rounded-2xl border transition-all space-y-2.5 ${
+                            isEnabled
+                              ? 'bg-neutral-950 border-neutral-800'
+                              : 'bg-neutral-950/40 border-neutral-800/40 opacity-60'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {action.type === 'google_review' && <Star className="w-4 h-4 text-amber-400" />}
+                              {action.type === 'whatsapp' && <MessageCircle className="w-4 h-4 text-emerald-400" />}
+                              {action.type === 'menu' && <Utensils className="w-4 h-4 text-orange-400" />}
+                              {action.type === 'wifi' && <Wifi className="w-4 h-4 text-cyan-400" />}
+                              {action.type === 'contact' && <User className="w-4 h-4 text-purple-400" />}
+                              {action.type === 'location' && <MapPin className="w-4 h-4 text-rose-400" />}
+                              {action.type === 'instagram' && <Share2 className="w-4 h-4 text-pink-400" />}
+                              {action.type === 'facebook' && <Share2 className="w-4 h-4 text-blue-400" />}
+                              {action.type === 'website' && <Globe className="w-4 h-4 text-indigo-400" />}
+                              <span className="text-xs font-bold text-white">{action.title}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleHubAction(action.id)}
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors ${
+                                isEnabled
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                  : 'bg-neutral-800 text-neutral-500 border-neutral-700'
+                              }`}
+                            >
+                              {isEnabled ? 'ACTIVE' : 'DISABLED'}
+                            </button>
+                          </div>
+
+                          {isEnabled && (
+                            <div className="space-y-2 pt-1 border-t border-neutral-800/60">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <input
+                                  type="text"
+                                  value={action.title}
+                                  onChange={(e) => handleUpdateHubAction(action.id, { title: e.target.value })}
+                                  placeholder="Button title"
+                                  className="bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                />
+                                <input
+                                  type="text"
+                                  value={action.subtitle || ''}
+                                  onChange={(e) => handleUpdateHubAction(action.id, { subtitle: e.target.value })}
+                                  placeholder="Sub-description"
+                                  className="bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                />
+                              </div>
+
+                              {action.type === 'whatsapp' ? (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <input
+                                    type="text"
+                                    value={action.phone || ''}
+                                    onChange={(e) => handleUpdateHubAction(action.id, { phone: e.target.value })}
+                                    placeholder="Phone with country code (e.g. +14155552671)"
+                                    className="bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={action.message || ''}
+                                    onChange={(e) => handleUpdateHubAction(action.id, { message: e.target.value })}
+                                    placeholder="Prefilled message"
+                                    className="bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                  />
+                                </div>
+                              ) : action.type === 'instagram' || action.type === 'facebook' ? (
+                                <input
+                                  type="text"
+                                  value={action.handle || action.destinationUrl || ''}
+                                  onChange={(e) => handleUpdateHubAction(action.id, { handle: e.target.value, destinationUrl: e.target.value })}
+                                  placeholder={action.type === 'instagram' ? 'Instagram username (e.g. @bellatrattoria)' : 'Facebook page handle'}
+                                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                />
+                              ) : action.type === 'location' ? (
+                                <input
+                                  type="text"
+                                  value={action.address || action.destinationUrl || ''}
+                                  onChange={(e) => handleUpdateHubAction(action.id, { address: e.target.value, destinationUrl: e.target.value })}
+                                  placeholder="Physical address or Google Maps URL"
+                                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                />
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={action.destinationUrl || ''}
+                                  onChange={(e) => handleUpdateHubAction(action.id, { destinationUrl: e.target.value })}
+                                  placeholder="Destination URL (e.g. https://...)"
+                                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: ORGANIC GOOGLE REVIEWS & FEEDBACK */}
             {activeTab === 'reviews' && (
               <div className="space-y-4">
                 <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-amber-400" />
-                      <span className="text-xs font-bold text-white">Enable Customer Review Gatekeeper</span>
+                      <span className="text-xs font-bold text-white">Enable Category AI Google Reviews</span>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -341,7 +641,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                     </label>
                   </div>
                   <p className="text-xs text-neutral-300">
-                    4-5 star happy customers generate a tailor-made Google review via Gemini AI with 1-tap clipboard copying. 1-3 star dissatisfied ratings are privately intercepted to your admin inbox!
+                    Gemini 3.8 Flash generates authentic, natural, human 5-star Google review drafts tailored precisely to your custom business category. All customers can submit honest feedback or post directly to Google.
                   </p>
                 </div>
 
@@ -357,12 +657,14 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-neutral-400">Business Category</label>
+                    <label className="text-[11px] font-semibold text-neutral-400">
+                      Custom Business Category <span className="text-amber-400">*</span>
+                    </label>
                     <input
                       type="text"
                       value={businessCategory}
                       onChange={(e) => setBusinessCategory(e.target.value)}
-                      placeholder="e.g. Specialty Coffee, Italian Dining"
+                      placeholder="Type any category (e.g. Italian Trattoria, Hair Salon, Dental Clinic...)"
                       className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
                     />
                   </div>
@@ -370,24 +672,24 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
 
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-semibold text-neutral-400">
-                    Google Review Direct URL (Target for 4-5 Stars)
+                    Google Review Direct URL
                   </label>
                   <input
                     type="text"
                     value={googleReviewUrl}
                     onChange={(e) => setGoogleReviewUrl(e.target.value)}
                     placeholder="https://g.page/r/your-google-place-id/review"
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
                   />
                   <span className="text-[10px] text-neutral-500">
-                    Find this in your Google Business Profile &gt; "Ask for reviews" link.
+                    From Google Business Profile &gt; "Ask for reviews" link.
                   </span>
                 </div>
 
                 {/* Praise Tags */}
                 <div className="space-y-2">
                   <label className="text-[11px] font-semibold text-neutral-400">
-                    Praise Tags (Customers can tap these to guide the AI)
+                    Category Praise Tags (Selected by guests to guide organic AI draft)
                   </label>
                   <div className="flex flex-wrap gap-1.5">
                     {praiseTags.map((tag) => (
@@ -417,7 +719,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                           handleAddTag();
                         }
                       }}
-                      placeholder="Add tag (e.g. Amazing Desserts, Fast WiFi)..."
+                      placeholder="Add tag (e.g. Homemade Pasta, Attentive Server, Spotless Clinic)..."
                       className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
                     />
                     <button
@@ -432,154 +734,18 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
 
                 {/* AI Review Tone */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold text-neutral-400">Default AI Tone</label>
+                  <label className="text-[11px] font-semibold text-neutral-400">Default AI Review Style</label>
                   <select
                     value={reviewTone}
                     onChange={(e) => setReviewTone(e.target.value as any)}
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
                   >
-                    <option value="enthusiastic">Enthusiastic & Delighted (Most effective for local search)</option>
-                    <option value="friendly">Warm & Friendly</option>
-                    <option value="short_and_sweet">Short, Punchy & Direct</option>
-                    <option value="professional">Professional & Detailed</option>
+                    <option value="friendly">Warm & Friendly (Everyday human tone)</option>
+                    <option value="enthusiastic">Enthusiastic & Delighted (Great for restaurants & experiences)</option>
+                    <option value="short_and_sweet">Short, Punchy & Direct (2-3 sentences)</option>
+                    <option value="professional">Detailed & Professional (Great for clinics & services)</option>
                   </select>
                 </div>
-              </div>
-            )}
-
-            {/* TAB 3: SMART CONDITIONAL ROUTING */}
-            {activeTab === 'conditional' && (
-              <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-indigo-400" />
-                      <span className="text-xs font-bold text-white">Smart Conditional Redirect Rules</span>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={conditionalEnabled}
-                        onChange={(e) => setConditionalEnabled(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-neutral-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                    </label>
-                  </div>
-                  <p className="text-xs text-neutral-300">
-                    Route scans dynamically based on the current time of day (Breakfast vs Dinner menu) or visitor device operating system (iOS vs Android store download).
-                  </p>
-                </div>
-
-                {conditionalEnabled && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-white">Active Priority Rules</span>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleAddRule('time')}
-                          className="px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-[11px] font-semibold flex items-center gap-1"
-                        >
-                          <Plus className="w-3 h-3" />
-                          <span>+ Time Window</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleAddRule('device_os')}
-                          className="px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-[11px] font-semibold flex items-center gap-1"
-                        >
-                          <Plus className="w-3 h-3" />
-                          <span>+ Device OS</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {rules.length === 0 ? (
-                      <div className="py-8 text-center text-xs text-neutral-500 border border-dashed border-neutral-800 rounded-2xl">
-                        No conditional rules defined yet. Add a Time Window or Device OS rule above.
-                      </div>
-                    ) : (
-                      rules.map((rule) => (
-                        <div
-                          key={rule.id}
-                          className="p-3.5 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-2.5"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              {rule.type === 'time' ? (
-                                <Clock className="w-4 h-4 text-amber-400" />
-                              ) : (
-                                <Smartphone className="w-4 h-4 text-indigo-400" />
-                              )}
-                              <input
-                                type="text"
-                                value={rule.label}
-                                onChange={(e) => handleUpdateRule(rule.id, { label: e.target.value })}
-                                placeholder="Rule name"
-                                className="bg-transparent text-xs font-bold text-white border-b border-transparent hover:border-neutral-700 focus:border-indigo-500 focus:outline-none"
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveRule(rule.id)}
-                              className="text-neutral-500 hover:text-rose-400 p-1"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-
-                          {rule.type === 'time' ? (
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div>
-                                <label className="text-[10px] text-neutral-500 block">From Time (24h)</label>
-                                <input
-                                  type="time"
-                                  value={rule.timeStart || '06:00'}
-                                  onChange={(e) => handleUpdateRule(rule.id, { timeStart: e.target.value })}
-                                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1 text-xs text-white"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-[10px] text-neutral-500 block">To Time (24h)</label>
-                                <input
-                                  type="time"
-                                  value={rule.timeEnd || '11:30'}
-                                  onChange={(e) => handleUpdateRule(rule.id, { timeEnd: e.target.value })}
-                                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1 text-xs text-white"
-                                />
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="text-xs">
-                              <label className="text-[10px] text-neutral-500 block mb-1">Target Operating System</label>
-                              <select
-                                value={rule.targetOs || 'ios'}
-                                onChange={(e) => handleUpdateRule(rule.id, { targetOs: e.target.value as any })}
-                                className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1 text-xs text-white"
-                              >
-                                <option value="ios">Apple iOS (iPhone / iPad) - Route to App Store</option>
-                                <option value="android">Google Android - Route to Play Store</option>
-                                <option value="desktop">Desktop Computers (Mac / Windows / Linux)</option>
-                              </select>
-                            </div>
-                          )}
-
-                          <div>
-                            <label className="text-[10px] text-neutral-500 block">Target Redirect URL</label>
-                            <input
-                              type="text"
-                              value={rule.destinationUrl}
-                              onChange={(e) => handleUpdateRule(rule.id, { destinationUrl: e.target.value })}
-                              placeholder="https://..."
-                              className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                            />
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
               </div>
             )}
 

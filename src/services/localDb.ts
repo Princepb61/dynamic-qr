@@ -380,7 +380,6 @@ export const localDb = {
         id: `link_${clean}_${Date.now()}`,
         slug: clean,
         title: payload.title || `QR Code (${clean})`,
-        destinationUrl: payload.destinationUrl,
         description: 'Assigned via mobile scan',
         isActive: true,
         isAssigned: true,
@@ -398,6 +397,7 @@ export const localDb = {
           margin: 2,
         },
         ...payload,
+        destinationUrl: payload.destinationUrl,
       };
       db.links.unshift(link);
     } else {

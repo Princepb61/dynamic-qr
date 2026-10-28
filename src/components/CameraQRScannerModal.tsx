@@ -18,6 +18,7 @@ import {
 import { LinkRecord } from '../types';
 import { api } from '../services/api';
 import { getLast4Letters } from '../utils/a4QrHelper';
+import jsQR from 'jsqr';
 
 interface CameraQRScannerModalProps {
   isOpen: boolean;
@@ -100,31 +101,45 @@ export const CameraQRScannerModal: React.FC<CameraQRScannerModalProps> = ({
   const startScanningLoop = () => {
     scanningRef.current = true;
 
-    // Check for BarcodeDetector support
-    const hasBarcodeDetector = typeof window !== 'undefined' && 'BarcodeDetector' in window;
-    let detector: any = null;
-    if (hasBarcodeDetector) {
-      try {
-        // @ts-ignore
-        detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
-      } catch {}
-    }
+    // Use offscreen canvas for high-performance cross-platform decoding with jsQR
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-    const scanFrame = async () => {
+    let lastScanTime = 0;
+
+    const scanFrame = () => {
       if (!scanningRef.current || !videoRef.current) return;
 
-      if (videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-        if (detector) {
+      const video = videoRef.current;
+      const now = performance.now();
+
+      // Scan every ~60ms for smooth 16fps scanning without overwhelming the CPU
+      if (video.readyState === video.HAVE_ENOUGH_DATA && now - lastScanTime >= 60) {
+        lastScanTime = now;
+        const width = video.videoWidth;
+        const height = video.videoHeight;
+
+        if (width > 0 && height > 0 && ctx) {
+          if (canvas.width !== width || canvas.height !== height) {
+            canvas.width = width;
+            canvas.height = height;
+          }
+
+          ctx.drawImage(video, 0, 0, width, height);
+          const imageData = ctx.getImageData(0, 0, width, height);
+
           try {
-            const barcodes = await detector.detect(videoRef.current);
-            if (barcodes.length > 0) {
-              const rawVal = barcodes[0].rawValue;
-              if (rawVal) {
-                handleCodeDetected(rawVal);
-                return;
-              }
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: 'dontInvert',
+            });
+
+            if (code && code.data && code.data.trim()) {
+              handleCodeDetected(code.data.trim());
+              return;
             }
-          } catch {}
+          } catch (err) {
+            console.debug('jsQR decode error', err);
+          }
         }
       }
 

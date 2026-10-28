@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Sparkles, Download, Palette, Image as ImageIcon, Eye, Frame, Check, Sliders, Coffee, Wifi, Star, Heart, Utensils, Link2, Upload } from 'lucide-react';
+import { X, Sparkles, Download, Palette, Image as ImageIcon, Frame, Check, Coffee, Wifi, Star, Heart, Utensils, Link2, Upload } from 'lucide-react';
 import QRCode from 'qrcode';
-import { QRSettings, QREyeShape } from '../types';
+import { QRSettings, LinkRecord } from '../types';
 
 interface QRStudioModalProps {
   isOpen: boolean;
@@ -29,7 +29,7 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
   const targetUrl = explicitTargetUrl || (currentLink ? `${baseUrl}/r/${currentLink.slug}` : '');
   const linkTitle = explicitLinkTitle || currentLink?.title || 'Dynamic QR Code';
   const initialSettings = explicitInitialSettings || currentLink?.qrSettings;
-  const [activeTab, setActiveTab] = useState<'colors' | 'eyes' | 'logo' | 'frame'>('colors');
+  const [activeTab, setActiveTab] = useState<'colors' | 'logo' | 'frame'>('colors');
   const [colorDark, setColorDark] = useState(initialSettings?.colorDark || '#0f172a');
   const [colorLight, setColorLight] = useState(initialSettings?.colorLight || '#ffffff');
   const [gradientEnabled, setGradientEnabled] = useState(initialSettings?.gradientEnabled || false);
@@ -38,8 +38,6 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
   const [gradientDirection, setGradientDirection] = useState<'to-r' | 'to-br' | 'to-b' | 'to-bl'>(
     initialSettings?.gradientDirection || 'to-br'
   );
-  const [eyeShape, setEyeShape] = useState<QREyeShape>(initialSettings?.eyeShape || 'rounded');
-  const [eyeColor, setEyeColor] = useState(initialSettings?.eyeColor || '');
   const [frameStyle, setFrameStyle] = useState(initialSettings?.frameStyle || 'bottom_badge');
   const [frameText, setFrameText] = useState(initialSettings?.frameText || 'SCAN ME');
   const [centerIcon, setCenterIcon] = useState(initialSettings?.centerIcon || 'none');
@@ -97,8 +95,6 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
       gradientColor1,
       gradientColor2,
       gradientDirection,
-      eyeShape,
-      eyeColor: eyeColor || (gradientEnabled ? gradientColor1 : colorDark),
     };
     if (onSaveSettings) {
       onSaveSettings(updatedSettings);
@@ -180,15 +176,14 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
         </div>
 
         {/* Studio Content */}
-        <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-neutral-800">
+        <div className="flex-1 overflow-y-auto md:overflow-hidden grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-neutral-800">
           {/* Controls Column (Left) */}
-          <div className="md:col-span-7 flex flex-col overflow-hidden">
+          <div className="md:col-span-7 flex flex-col overflow-visible md:overflow-hidden">
             {/* Tabs */}
-            <div className="flex border-b border-neutral-800 bg-neutral-950/40 p-1.5 gap-1">
+            <div className="flex border-b border-neutral-800 bg-neutral-950/40 p-1.5 gap-1 overflow-x-auto no-scrollbar">
               {[
                 { id: 'colors', label: 'Colors & Gradient', icon: Palette },
-                { id: 'eyes', label: 'Eye Patterns', icon: Eye },
-                { id: 'logo', label: 'Center Brand Logo', icon: ImageIcon },
+                { id: 'logo', label: 'Brand Logo', icon: ImageIcon },
                 { id: 'frame', label: 'Callout Frame', icon: Frame },
               ].map((tab) => {
                 const Icon = tab.icon;
@@ -197,7 +192,7 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                    className={`flex-1 min-w-[100px] py-2 px-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                       isActive
                         ? 'bg-neutral-800 text-white shadow-sm'
                         : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40'
@@ -339,38 +334,7 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
                 </div>
               )}
 
-              {/* TAB 2: EYE PATTERNS */}
-              {activeTab === 'eyes' && (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-white block">Finder Corner Eye Style</label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {[
-                        { id: 'square', label: 'Classic Square', desc: 'Standard industrial look' },
-                        { id: 'rounded', label: 'Smooth Rounded', desc: 'Sleek rounded corners' },
-                        { id: 'circle', label: 'Circular Dot', desc: 'Modern high-tech circular' },
-                        { id: 'leaf', label: 'Curved Leaf', desc: 'Diagonal organic corner' },
-                      ].map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => setEyeShape(item.id as any)}
-                          className={`p-3 rounded-xl border text-left transition-all ${
-                            eyeShape === item.id
-                              ? 'bg-indigo-500/10 border-indigo-500 text-white shadow-sm'
-                              : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700'
-                          }`}
-                        >
-                          <span className="text-xs font-bold block">{item.label}</span>
-                          <span className="text-[10px] text-neutral-500 block mt-0.5">{item.desc}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB 3: CENTER BRAND LOGO */}
+              {/* TAB 2: CENTER BRAND LOGO */}
               {activeTab === 'logo' && (
                 <div className="space-y-4">
                   {/* Custom upload */}
@@ -520,7 +484,7 @@ export const QRStudioModal: React.FC<QRStudioModalProps> = ({
                   : 'bg-white text-neutral-900'
               }`}
               style={{
-                borderRadius: eyeShape === 'rounded' || eyeShape === 'circle' ? '24px' : '12px',
+                borderRadius: '20px',
               }}
             >
               {/* Top Banner Frame */}

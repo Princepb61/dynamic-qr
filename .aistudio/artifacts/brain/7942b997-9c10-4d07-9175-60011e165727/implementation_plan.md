@@ -1,173 +1,153 @@
-# Implementation Plan: AI Custom Google Reviews, Visual QR Studio & Smart Redirects
+# TapLocal Multi-Action Smart Hub, Batch Security & Organic Review Engine
 
-Deliver four connected capabilities into **TapLocal** in a unified update:
-1. **AI-Powered Custom Google Review Generator**: Allow 4–5 star customers to get personalized, authentic 5-star Google review drafts generated in 1 tap using Gemini (`gemini-3.8-flash`), copy them to the clipboard, and post straight to Google Reviews.
-2. **Customer Review Gatekeeper & Feedback Inbox**: Interstitial rating page (1–5 stars) that routes 4–5 star visitors to Google Reviews, and captures 1–3 star feedback privately to an admin inbox with AI reply drafting.
-3. **Visual QR Designer Studio**: Custom center brand logo upload, eye/corner style shaping, multi-stop gradient color palettes, frame templates, and vector SVG + high-res PNG export.
-4. **Smart Conditional Redirects (Dayparting & Device OS)**: Dynamic routing based on time-of-day (e.g. Breakfast vs Lunch vs Dinner), day-of-week, and visitor device OS (iOS App Store vs Android Play Store vs Web).
+Deliver an all-in-one Multi-Action Smart Hub QR system allowing owners to bundle multiple destinations into a single interactive landing page, configure per-batch passwords for zero-login staff assignment, generate natural category-specific Google reviews with Gemini 3.8 Flash, fix mobile Visual QR Designer controls, ensure rock-solid cross-device persistence, and upgrade in-app camera scanning with universal pure-JS decoding.
 
----
-
-## User Review Required
+## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> - **AI Model Selection**: Uses `gemini-3.8-flash` on the server (`server.ts` via `@google/genai`) to generate rapid, authentic review options without exposing API keys to the browser.
-> - **Google Review Hand-off**: Browser security prevents external web apps from silently submitting to Google Accounts without user interaction; our flow copies the chosen AI review to clipboard and opens the exact Google Business review dialog in one tap so the customer just presses Paste and Submit.
-> - **Cross-Device Sync**: All review gate settings, conditional routing rules, and QR styling configurations sync seamlessly across devices via Firestore.
+> The following critical product decisions have been confirmed and incorporated into this blueprint:
+
+- **Multi-Action QR Behavior**: When a QR code is assigned with multiple selected action destinations (e.g. Google Reviews + WhatsApp + Menu + Wi-Fi + Location), scanning displays an **Interactive Smart Hub** landing page with branded action cards rather than silently picking one.
+- **Batch-Specific Passwords**: Unassigned QR codes created inside a batch can be claimed on-site by entering **only that batch's specific password**, preventing unauthorized reassignments while avoiding requiring staff to possess full super-admin accounts.
+- **Dynamic Category-Tailored AI Reviews**: Rather than a static set of praise tags, owners can type or choose **any custom business category** (e.g. Italian Trattoria, Pediatric Clinic, Boutique Salon, Auto Detailing, Law Firm). Gemini 3.8 Flash will generate authentic, conversational, and realistic review drafts tailored specifically to that business category and service highlights.
+- **Feature Deprecations**: Completely remove conditional routing (time-of-day / device OS redirects), remove eye pattern customizers from the Visual QR Designer, and remove the "1-3 star dissatisfied ratings are privately intercepted to your admin inbox!" banner/mechanics, allowing direct, transparent customer feedback and real organic reviews.
 
 ---
 
-## Proposed Changes
+## 1. Overview & Core Concept
 
-### 1. Backend Server & AI Endpoints (`server.ts`)
-- Initialize `@google/genai` on the server using `process.env.GEMINI_API_KEY`:
-  ```ts
-  import { GoogleGenAI } from "@google/genai";
-  const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY,
-    httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-  });
-  ```
-- **New Endpoint: `POST /api/ai/generate-review`**:
-  - Accepts `{ businessName, category, selectedTags, customNote, tone }`.
-  - Prompts `gemini-3.8-flash` to generate 3 diverse, natural, authentic 5-star review options (Enthusiastic, Short & Direct, Warm & Detailed).
-  - Returns `{ reviews: string[] }`.
-- **New Endpoint: `POST /api/ai/draft-reply`**:
-  - For store owners handling 1–3 star private complaints in the admin inbox: drafts an empathetic, de-escalating customer service response with resolution options.
-- **New Endpoint: `POST /api/feedback/submit` & `GET /api/feedback/list`**:
-  - Handles storing and retrieving low-star customer feedback in the local and Firestore sync store.
+TapLocal evolves from a single-destination redirect tool into an omnichannel local business engagement suite:
+- **All-in-One Multi-Action Smart Hub**: A single physical QR standee or sticker can host multiple customer touchpoints simultaneously: Google Reviews, WhatsApp Order/Chat, Contact vCard, Digital Menu, Wi-Fi Instant Connect, Website, Facebook, and Google Maps Navigation.
+- **Batch Security Without Admin Exposure**: Multi-location chains, restaurants with floor captains, and event organizers can assign QR codes on the fly using a dedicated batch password without disclosing master admin credentials.
+- **Organic Review Intelligence**: Gemini 3.8 Flash crafts human, warm, and authentic Google review drafts based on custom business categories and selected service highlights, eliminating robotic AI phrasing.
+- **Universal Mobile Camera Scanner**: In-app QR scanning powered by pure JavaScript canvas pixel decoding (`jsqr`), eliminating browser incompatibilities and enabling reliable scanning on iOS Safari, Android Chrome, and desktop browsers alike.
+- **Zero-Loss Persistence**: Redundant synchronization across Cloud Firestore, local storage cache, and persistent server disk JSON so links, batches, and visual styles persist across updates and restarts.
 
 ---
 
-### 2. Data Models (`src/types.ts`)
-- **Review Gate & AI Review Configuration**:
-  ```ts
-  export interface ReviewGateConfig {
-    enabled: boolean;
-    businessName?: string;
-    businessCategory?: string; // Restaurant, Cafe, Salon, Gym, Clinic, Hotel, Retail, etc.
-    googleReviewUrl: string;
-    minStarsForGoogle: 4 | 5;
-    enableAiReviewAssistant?: boolean;
-    suggestedTags?: string[]; // e.g. ["Delicious Food", "Great Atmosphere", "Fast Service"]
-    positiveHeadline?: string;
-    negativeHeadline?: string;
-  }
+## 2. User Experience & Visual Design
 
-  export interface ReviewFeedbackRecord {
-    id: string;
-    linkId: string;
-    slug: string;
-    businessName: string;
-    rating: number;
-    comment: string;
-    customerName?: string;
-    customerContact?: string;
-    createdAt: string;
-    status: 'new' | 'reviewed' | 'resolved';
-    aiSuggestedReply?: string;
-  }
-  ```
-- **Conditional Routing Configuration**:
-  ```ts
-  export interface RedirectRule {
-    id: string;
-    type: 'time_schedule' | 'device_os' | 'day_of_week';
-    name: string;
-    destinationUrl: string;
-    startTime?: string; // HH:mm
-    endTime?: string;   // HH:mm
-    daysOfWeek?: number[]; // 0=Sun, 1=Mon, ..., 6=Sat
-    targetOs?: 'ios' | 'android' | 'desktop';
-    isActive: boolean;
-  }
+### Key User Flows
 
-  export interface ConditionalRoutingConfig {
-    enabled: boolean;
-    rules: RedirectRule[];
-  }
-  ```
-- **Enhanced QR Visual Settings**:
-  ```ts
-  export interface QRSettings {
-    colorDark: string;
-    colorLight: string;
-    errorCorrectionLevel: 'L' | 'M' | 'Q' | 'H';
-    margin: number;
-    frameStyle?: 'none' | 'bottom_badge' | 'top_badge' | 'rounded_card' | 'restaurant_standee' | 'review_gate_card';
-    frameText?: string;
-    frameSubtext?: string;
-    centerIcon?: 'none' | 'link' | 'wifi' | 'phone' | 'message' | 'star' | 'coffee' | 'custom_logo';
-    centerLogoUrl?: string;
-    logoSizePercent?: number;
-    gradientEnabled?: boolean;
-    gradientColorEnd?: string;
-    eyeShape?: 'square' | 'rounded' | 'circle';
-  }
-  ```
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 1. Batch Creation & Password Setup                                          │
+│    Owner enters Name, Prefix, Custom Quantity (1-250), & Batch Password     │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 2. Physical QR Scan & Verification                                          │
+│    Staff scans unassigned QR -> Enters Batch Password -> Unlocks Assignment │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 3. Multi-Action Selector                                                    │
+│    Staff checks desired options: [x] Google Review  [x] WhatsApp            │
+│                                  [x] Wi-Fi          [x] Digital Menu        │
+│                                  [x] Maps Location  [x] Contact vCard       │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 4. Customer Experience: Multi-Action Smart Hub                              │
+│    Customer scans physical QR -> Interactive mobile page with action cards  │
+│    - "Leave a 5-Star Review" (Category-aware Gemini AI draft assistant)     │
+│    - "Chat on WhatsApp" (Direct wa.me link with prefilled order prompt)     │
+│    - "Connect to Guest Wi-Fi" (1-tap password copy & security info)         │
+│    - "Digital Menu" / "Save Contact to Phone" / "Get Directions"            │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Visual Identity & Theme
+- **Theme**: Utilitarian, tactile, and high-density SaaS dark aesthetic (`bg-neutral-950` canvas, `bg-neutral-900` card surfaces, `border-neutral-800` subtle elevation dividers).
+- **Zero-Pill Discipline**: Metadata displayed as quiet, unboxed text separated by typographic middots (`·`). Interactive elements styled as segmented controls and buttons.
+- **Typography**: Plus Jakarta Sans for geometric brand clarity, with JetBrains Mono / tabular numbers (`font-mono`) for batch codes, slugs, Wi-Fi credentials, and analytics metrics.
+- **Mobile Responsive Designer Studio**: Visual QR Designer modal redesigned with mobile-first stacked controls, scrollable accordion sections, floating live sticky QR preview at the bottom/top, and 48px touch targets for color pickers, frame styles, and gradient sliders.
 
 ---
 
-### 3. Customer-Facing Review Gatekeeper UI (`src/components/ReviewGatekeeperView.tsx`)
-- Displayed when customer scans `/r/:slug` with Review Gate enabled:
-  - **Star Rating Selection**: 5 interactive animated stars with dynamic mood emojis.
-  - **If 4 or 5 Stars**:
-    - Congratulatory screen with Google logo.
-    - **AI Review Assistant Panel**:
-      - Clickable praise tags (e.g. *Friendly Staff*, *Quick Service*, *Amazing Quality*, *Clean Ambiance*).
-      - Quick optional input ("Anything specific you enjoyed?").
-      - One-tap button: **"✨ Generate 5-Star Review with AI"**.
-      - Displays 3 generated options. Customer can select their favorite, edit in place if desired, or tap **"Copy & Post on Google Reviews"**.
-      - Visual confirmation: copies text to clipboard, shows toast, and opens the Google Review page.
-  - **If 1 to 3 Stars**:
-    - Gentle feedback form: *"We are sorry to hear that. How can we make it right?"*
-    - Fields: Private comment, optional Name & Phone/Email.
-    - Submits securely to store owner feedback inbox.
+## 3. Key Product Decisions & Trade-Offs
+
+- **Multi-Action Hub Architecture**:
+  - *Chosen Approach*: When 2 or more actions are configured for a link, TapLocal automatically renders an interactive Smart Hub landing page. If only 1 action is configured, it directly performs that action (or renders the dedicated Wi-Fi / vCard / Review card).
+  - *Why*: Eliminates customer friction when only a single destination is intended, while giving full multi-channel flexibility when businesses want an all-in-one table standee.
+- **Batch Password Enforcement**:
+  - *Chosen Approach*: Each batch record stores an optional `batchPassword`. When scanning an unassigned link belonging to that batch, the activation screen requests the batch password.
+  - *Why*: Enables safe delegation to store employees, waiters, or field technicians without sharing the owner's master administrative login.
+- **Organic AI Review Generation**:
+  - *Chosen Approach*: Prompt Gemini 3.8 Flash with specific instructions to avoid overly polished, generic corporate marketing copy. Generate 3 short, colloquial, and natural reviews reflecting the exact business category and chosen highlights.
+  - *Why*: Customers immediately recognize generic AI text; organic drafts sound like genuine human reviews and have a much higher conversion rate on Google Maps.
+- **Universal JS QR Decoder**:
+  - *Chosen Approach*: Integrate `jsqr` alongside native canvas frame grabbing, running at 30fps with automatic brightness/contrast normalization.
+  - *Why*: Browser-native `BarcodeDetector` fails on iOS Safari and older Android browsers; `jsqr` works universally without native dependencies.
 
 ---
 
-### 4. Admin Customer Feedback Inbox (`src/components/CustomerFeedbackModal.tsx`)
-- Accessible from the dashboard navigation bar with unread badge.
-- View all private low-star complaints.
-- Click **"✨ AI Reply Assistant"** to generate an empathetic customer response ready to copy and send via WhatsApp/SMS/Email.
-- Mark status as New / In Progress / Resolved.
+## 4. Technical Architecture & Data Strategy
 
----
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             TAPLOCAL SYSTEM CORE                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   [ Client Browser ]                 [ Express / Vite Dev Server ]         │
+│   - React 19 UI                      - Port 3000                           │
+│   - Pure JS jsqr Camera Scanner      - Dynamic Redirects (/r/:slug)         │
+│   - Multi-Action Smart Hub           - vCard Download (/api/vcard/:slug)    │
+│   - Visual QR Studio (Mobile-Ready)  - Gemini 3.8 Flash AI Review Endpoint │
+│                                      - Local Disk Persistence (redirects)   │
+│                                                     │                       │
+│                                                     ▼                       │
+│                                         [ Cloud Firestore DB ]              │
+│                                         - links collection                  │
+│                                         - batches collection                │
+│                                         - Multi-device real-time sync       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
-### 5. Advanced Visual QR Designer (`src/components/QRStudioModal.tsx`)
-- Drag-and-drop / file upload for custom center brand logos with auto-white contrast pad.
-- Linear gradient color generator (start color to end color).
-- Eye frame styling (Square, Modern Rounded, Circular Dot).
-- New frame card templates: "⭐ RATE US ON GOOGLE", "🍽️ SCAN FOR MENU", "📶 SCAN FOR WI-FI".
-- Vector SVG download (for professional commercial printing) and high-resolution PNG.
+### Data Models & State Contracts
 
----
+#### 1. Multi-Action Hub Structure (`hubActions`)
+```ts
+export interface HubActionItem {
+  id: string;
+  type: 'google_review' | 'whatsapp' | 'menu' | 'wifi' | 'contact' | 'website' | 'facebook' | 'location';
+  title: string;
+  subtitle?: string;
+  enabled: boolean;
+  destinationUrl?: string;
+  wifiData?: WifiData;
+  vcardData?: VCardData;
+}
+```
 
-### 6. Link Configuration Tabs (`src/components/EditDestinationModal.tsx` & `src/components/CreateLinkModal.tsx`)
-- Modern tabbed interface:
-  1. **General**: URL, Title, Content Type, Presentation Mode.
-  2. **Google Review Gate & AI**: Enable gatekeeper, Google Review link, Business category, suggested tags, AI generation toggle.
-  3. **Smart Redirects**: Schedule dayparting (Breakfast/Lunch/Dinner) & OS split (iOS vs Android).
-  4. **Appearance**: 1-tap quick action templates.
+#### 2. Enhanced `BatchRecord` with Security
+```ts
+export interface BatchRecord {
+  id: string;
+  name: string;
+  prefix: string;
+  count: number;
+  batchPassword?: string;
+  ownerId: string;
+  createdAt: string;
+}
+```
 
----
+#### 3. Category-Tailored AI Review Prompt Contract
+- Route: `POST /api/ai/generate-review`
+- Model: `gemini-3.8-flash` via `@google/genai`
+- Input: `businessCategory`, `businessName`, `praiseTags`, `customNotes`
+- Output: 3 distinct, authentic, organic Google review drafts varying in length and style.
 
-## Verification Plan
-
-### Automated & Build Verification
-- Run `compile_applet` (`npm run build` and `tsc --noEmit`) to verify clean compilation with zero type errors.
-
-### Manual Verification Scenarios
-1. **AI Review Generation**:
-   - Open `/r/[slug]` configured with Review Gatekeeper.
-   - Tap 5 stars -> select praise tags -> tap "Generate with AI".
-   - Verify 3 natural review suggestions appear.
-   - Tap "Copy & Post on Google Reviews" -> verify clipboard contains the review and external tab opens to Google Review URL.
-2. **Private Low-Star Feedback**:
-   - Tap 2 stars -> write complaint -> submit.
-   - Open Admin Dashboard -> "Customer Feedback" -> verify submission appears with "AI Reply Draft" action.
-3. **Smart Conditional Redirect**:
-   - Configure iOS to Apple App Store and Android to Play Store.
-   - Test user agent matching and verify fallback.
-4. **Visual QR Studio**:
-   - Upload custom logo, set gradient, download SVG, and verify scannability.
+### Execution Plan Phases
+1. **Model & State Updates**: Update data types to support `batchPassword`, `hubActions`, and clean category configurations.
+2. **Feature Removal**: Remove conditional routing, eye pattern selectors, and the 1-3 star negative intercept mechanism.
+3. **In-App Camera Fix**: Implement pure JS `jsqr` canvas decoding in `CameraQRScannerModal.tsx`.
+4. **Visual QR Studio Mobile Polish**: Refactor `QRStudioModal.tsx` for fluid mobile screens.
+5. **Multi-Action Hub Implementation**: Build the Multi-Action Hub builder in assignment views and customer-facing responsive landing interface.
+6. **Organic Review Engine**: Upgrade Gemini 3.8 Flash prompts for organic, category-tailored reviews.
+7. **Verification**: Run `compile_applet` and verify end-to-end functionality.

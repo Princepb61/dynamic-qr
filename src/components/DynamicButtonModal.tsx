@@ -69,7 +69,7 @@ export const DynamicButtonModal: React.FC<DynamicButtonModalProps> = ({
         setAnimation('pulse');
         setIcon('arrow');
       }
-      setPresentationMode(link.presentationMode || 'button_page');
+      setPresentationMode(link.presentationMode === 'instant_redirect' ? 'instant_redirect' : 'button_page');
     }
   }, [link]);
 

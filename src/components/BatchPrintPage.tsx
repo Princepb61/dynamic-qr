@@ -25,6 +25,8 @@ import {
   Share2,
   Camera,
   Grid3X3,
+  Lock,
+  KeyRound,
 } from 'lucide-react';
 import {
   getLast4Letters,
@@ -60,6 +62,7 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
   const [batchName, setBatchName] = useState('Table Standee Stock');
   const [prefix, setPrefix] = useState('table');
   const [batchCount, setBatchCount] = useState<number>(12);
+  const [batchPassword, setBatchPassword] = useState('');
   const [selectedLabelPreset, setSelectedLabelPreset] = useState<LabelPresetType>('a4_grid');
   const [gridCols, setGridCols] = useState<2 | 3 | 4>(3);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -149,8 +152,9 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
       const res = await api.generateBatch({
         batchName: batchName.trim() || 'Pre-Printed Batch',
         prefix: prefix.trim() || 'qr',
-        count: batchCount,
+        count: Math.min(250, Math.max(1, batchCount || 1)),
         labelPreset: selectedLabelPreset,
+        batchPassword: batchPassword.trim() || undefined,
         ownerId: currentUser?.id || 'usr_admin_1',
         ownerEmail: currentUser?.email || 'p0667500@gmail.com',
         ownerName: currentUser?.name || 'System Administrator',
@@ -443,19 +447,59 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block text-neutral-400 font-medium mb-1">Quantity</label>
-                      <select
+                      <label className="block text-neutral-400 font-medium mb-1 flex items-center justify-between">
+                        <span>Quantity (1–250)</span>
+                        <span className="text-[10px] text-amber-400 font-bold font-mono">{batchCount} QRs</span>
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={250}
                         value={batchCount}
-                        onChange={(e) => setBatchCount(Number(e.target.value))}
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                      >
-                        <option value={6}>6 Codes</option>
-                        <option value={12}>12 Codes</option>
-                        <option value={24}>24 Codes</option>
-                        <option value={36}>36 Codes</option>
-                        <option value={48}>48 Codes</option>
-                      </select>
+                        onChange={(e) => setBatchCount(Math.min(250, Math.max(1, parseInt(e.target.value) || 1)))}
+                        className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500"
+                      />
                     </div>
+                  </div>
+
+                  {/* Quantity quick preset buttons */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] text-neutral-500 font-semibold uppercase">Presets:</span>
+                    {[6, 12, 24, 48, 100, 250].map((qty) => (
+                      <button
+                        key={qty}
+                        type="button"
+                        onClick={() => setBatchCount(qty)}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all ${
+                          batchCount === qty
+                            ? 'bg-amber-500 text-neutral-950 shadow-sm'
+                            : 'bg-neutral-950 border border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-700'
+                        }`}
+                      >
+                        {qty}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Batch Security Password */}
+                  <div className="p-3 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-neutral-200 flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-amber-400" />
+                        Batch Password (Field Assignment)
+                      </label>
+                      <span className="text-[10px] text-neutral-500 font-mono">Optional</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={batchPassword}
+                      onChange={(e) => setBatchPassword(e.target.value)}
+                      placeholder="e.g. table-pass-123 or store#4"
+                      className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-white placeholder-neutral-600 focus:outline-none focus:border-amber-500 font-mono text-xs"
+                    />
+                    <p className="text-[10px] text-neutral-400 leading-tight">
+                      When set, staff scanning an unassigned QR from this batch can activate & assign destinations using <span className="text-amber-300 font-semibold">only this password</span> without needing admin dashboard login.
+                    </p>
                   </div>
 
                   {/* Physical Label & Thermal Printer Preset Selector */}
@@ -562,7 +606,14 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                         onClick={() => setSelectedBatchId(b.id)}
                         className="flex-1 text-left"
                       >
-                        <span className="font-semibold block text-neutral-200">{b.name}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold block text-neutral-200">{b.name}</span>
+                          {b.batchPassword && (
+                            <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono">
+                              <Lock className="w-2.5 h-2.5" /> PW
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-neutral-500 font-mono">
                           {b.count} QRs · {new Date(b.createdAt).toLocaleDateString()}
                         </span>

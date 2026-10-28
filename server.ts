@@ -5,12 +5,16 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import * as UAParserModule from 'ua-parser-js';
 import QRCode from 'qrcode';
+import { GoogleGenAI } from '@google/genai';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Interop helper for UAParser across ESM / CJS bundlers
 const UAParser = (UAParserModule as any).UAParser || (UAParserModule as any).default || UAParserModule;
+
+// Initialize Google GenAI client
+const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI() : null;
 
 export interface UserRecord {
   id: string;
@@ -31,7 +35,7 @@ export interface LinkRecord {
   destinationUrl: string;
   description?: string;
   isActive: boolean;
-  contentType?: 'url' | 'whatsapp' | 'vcard' | 'wifi' | 'text' | 'button';
+  contentType?: 'url' | 'whatsapp' | 'vcard' | 'wifi' | 'text' | 'button' | 'multi_action_hub';
   createdAt: string;
   updatedAt: string;
   tags?: string[];
@@ -43,6 +47,7 @@ export interface LinkRecord {
   batchId?: string;
   batchName?: string;
   batchIndex?: number;
+  batchPassword?: string;
   qrSettings?: {
     colorDark?: string;
     colorLight?: string;
@@ -62,7 +67,7 @@ export interface LinkRecord {
     animation?: string;
     showQRBadge?: boolean;
   };
-  presentationMode?: 'instant_redirect' | 'button_page' | 'review_gate';
+  presentationMode?: 'instant_redirect' | 'button_page' | 'review_gate' | 'multi_action_hub';
   reviewGate?: {
     enabled: boolean;
     businessName?: string;
@@ -72,19 +77,38 @@ export interface LinkRecord {
     praiseTags: string[];
     customTone?: string;
   };
-  conditionalRouting?: {
+  hubConfig?: {
     enabled: boolean;
-    rules: Array<{
+    heading?: string;
+    subheading?: string;
+    actions: Array<{
       id: string;
-      label: string;
-      type: 'time' | 'device_os';
-      timeStart?: string;
-      timeEnd?: string;
-      daysOfWeek?: number[];
-      targetOs?: 'ios' | 'android' | 'desktop' | 'other';
-      destinationUrl: string;
+      title: string;
+      type: 'google_review' | 'whatsapp' | 'contact' | 'menu' | 'wifi' | 'website' | 'facebook' | 'instagram' | 'location';
+      destinationUrl?: string;
+      phone?: string;
+      message?: string;
+      address?: string;
+      handle?: string;
+      googlePlaceId?: string;
+      subtitle?: string;
+      enabled?: boolean;
     }>;
-    fallbackUrl?: string;
+  };
+  vcardData?: {
+    fullName: string;
+    phone?: string;
+    email?: string;
+    organization?: string;
+    title?: string;
+    website?: string;
+    address?: string;
+  };
+  wifiData?: {
+    ssid: string;
+    password?: string;
+    encryption?: 'WPA' | 'WEP' | 'nopass';
+    hidden?: boolean;
   };
 }
 
@@ -559,8 +583,9 @@ async function startServer() {
               </div>
 
               <div>
-                <label class="block text-xs font-semibold text-neutral-300 mb-1">Admin Verification Password</label>
-                <input type="password" id="adminPass" placeholder="Enter Admin Password" required class="w-full px-3.5 py-2 text-xs bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-indigo-500">
+                <label class="block text-xs font-semibold text-neutral-300 mb-1">${link.batchPassword ? 'Batch Security Password' : 'Batch / Admin Password'} <span class="text-indigo-400">*</span></label>
+                <input type="password" id="adminPass" placeholder="${link.batchPassword ? 'Enter batch password' : 'Enter batch or admin password'}" required class="w-full px-3.5 py-2 text-xs bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-indigo-500">
+                ${link.batchPassword ? '<p class="text-[11px] text-indigo-400 mt-1">This QR is batch-protected. Enter the password assigned to this batch to activate without login.</p>' : ''}
               </div>
 
               <div id="statusMsg" class="hidden p-2.5 rounded-lg text-xs"></div>
@@ -684,34 +709,116 @@ async function startServer() {
       target = 'https://' + target;
     }
 
-    // Evaluate Smart Conditional Routing (Time Window & Device OS)
-    if (link.conditionalRouting?.enabled && link.conditionalRouting.rules?.length) {
-      const now = new Date();
-      const currentHours = now.getHours().toString().padStart(2, '0');
-      const currentMinutes = now.getMinutes().toString().padStart(2, '0');
-      const currentTime = `${currentHours}:${currentMinutes}`;
-      const currentDay = now.getDay();
-      const osLower = os.toLowerCase();
-      const isIos = osLower.includes('ios') || osLower.includes('iphone') || osLower.includes('ipad');
-      const isAndroid = osLower.includes('android');
-      const detectedOs: 'ios' | 'android' | 'desktop' | 'other' = isIos ? 'ios' : isAndroid ? 'android' : devType === 'desktop' ? 'desktop' : 'other';
+    // Multi-Action Smart Hub Presentation Mode
+    if (
+      (link.presentationMode === 'multi_action_hub' ||
+        link.contentType === 'multi_action_hub' ||
+        (link.hubConfig && link.hubConfig.enabled && link.hubConfig.actions && link.hubConfig.actions.length > 0)) &&
+      req.query.direct !== '1'
+    ) {
+      const hub = link.hubConfig || {
+        enabled: true,
+        heading: link.title,
+        subheading: link.description || 'Welcome! Choose an option below',
+        actions: [],
+      };
+      const activeActions = (hub.actions || []).filter((a) => a.enabled !== false);
+      const hubHeading = escapeHtml(hub.heading || link.title);
+      const hubSub = escapeHtml(hub.subheading || link.description || 'Tap any option below to get started');
 
-      for (const rule of link.conditionalRouting.rules) {
-        if (rule.type === 'time') {
-          const matchDay = !rule.daysOfWeek || rule.daysOfWeek.length === 0 || rule.daysOfWeek.includes(currentDay);
-          if (matchDay && rule.timeStart && rule.timeEnd) {
-            if (currentTime >= rule.timeStart && currentTime <= rule.timeEnd) {
-              target = rule.destinationUrl.startsWith('http') ? rule.destinationUrl : `https://${rule.destinationUrl}`;
-              break;
-            }
-          }
-        } else if (rule.type === 'device_os') {
-          if (rule.targetOs && rule.targetOs === detectedOs) {
-            target = rule.destinationUrl.startsWith('http') ? rule.destinationUrl : `https://${rule.destinationUrl}`;
-            break;
-          }
-        }
-      }
+      return res.send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${hubHeading}</title>
+          <script src="https://cdn.tailwindcss.com"></script>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+          <style>
+            body { font-family: 'Plus Jakarta Sans', sans-serif; }
+            .font-mono { font-family: 'JetBrains Mono', monospace; }
+          </style>
+        </head>
+        <body class="bg-neutral-950 text-neutral-100 min-h-screen flex flex-col justify-between p-4 sm:p-6 antialiased selection:bg-indigo-500 selection:text-white">
+          <div class="max-w-md w-full mx-auto my-auto space-y-6">
+            <!-- Hub Header -->
+            <div class="text-center space-y-2">
+              <div class="w-16 h-16 rounded-2xl bg-indigo-600/15 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mx-auto shadow-lg shadow-indigo-500/10">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h.01"/><path d="M17 7h.01"/><path d="M7 17h.01"/><path d="M17 17h.01"/></svg>
+              </div>
+              <h1 class="text-2xl sm:text-3xl font-black text-white tracking-tight">${hubHeading}</h1>
+              <p class="text-xs sm:text-sm text-neutral-400 max-w-xs mx-auto leading-relaxed">${hubSub}</p>
+            </div>
+
+            <!-- Actions List -->
+            <div class="space-y-3">
+              ${activeActions.map((act) => {
+                let actionHref = act.destinationUrl || '#';
+                let iconSvg = '';
+                let badge = '';
+
+                if (act.type === 'google_review') {
+                  actionHref = act.destinationUrl || (act.googlePlaceId ? `https://search.google.com/local/writereview?placeid=${encodeURIComponent(act.googlePlaceId)}` : '#');
+                  iconSvg = '<svg class="w-5 h-5 text-amber-400" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+                  badge = '<span class="text-[10px] font-bold text-amber-400 uppercase tracking-wider">5-Star Review</span>';
+                } else if (act.type === 'whatsapp') {
+                  const phoneDigits = (act.phone || '').replace(/[^0-9]/g, '');
+                  const textMsg = encodeURIComponent(act.message || 'Hello!');
+                  actionHref = `https://wa.me/${phoneDigits}?text=${textMsg}`;
+                  iconSvg = '<svg class="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
+                } else if (act.type === 'wifi') {
+                  actionHref = `/r/${escapeHtml(slug)}?direct=wifi`;
+                  iconSvg = '<svg class="w-5 h-5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>';
+                } else if (act.type === 'contact') {
+                  actionHref = `/api/vcard/${escapeHtml(slug)}.vcf`;
+                  iconSvg = '<svg class="w-5 h-5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+                } else if (act.type === 'menu') {
+                  actionHref = act.destinationUrl || '#';
+                  iconSvg = '<svg class="w-5 h-5 text-orange-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 2v6a3 3 0 0 1-3 3 3 3 0 0 1-3-3V2"/><path d="M15 2v14"/><path d="M6 2v20"/><path d="M2 6h8"/></svg>';
+                } else if (act.type === 'location') {
+                  actionHref = act.destinationUrl || (act.address ? `https://maps.google.com/?q=${encodeURIComponent(act.address)}` : '#');
+                  iconSvg = '<svg class="w-5 h-5 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
+                } else if (act.type === 'facebook') {
+                  actionHref = act.destinationUrl || `https://facebook.com/${act.handle || ''}`;
+                  iconSvg = '<svg class="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>';
+                } else if (act.type === 'instagram') {
+                  actionHref = act.destinationUrl || `https://instagram.com/${(act.handle || '').replace(/^@/, '')}`;
+                  iconSvg = '<svg class="w-5 h-5 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>';
+                } else {
+                  actionHref = act.destinationUrl || '#';
+                  iconSvg = '<svg class="w-5 h-5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
+                }
+
+                return `
+                  <a href="${escapeHtml(actionHref)}" class="group block p-4 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 rounded-2xl transition-all shadow-md active:scale-[0.98]">
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-3.5">
+                        <div class="w-10 h-10 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                          ${iconSvg}
+                        </div>
+                        <div class="text-left">
+                          <span class="text-sm font-bold text-white block group-hover:text-indigo-300 transition-colors">${escapeHtml(act.title)}</span>
+                          ${act.subtitle ? `<span class="text-[11px] text-neutral-400 block">${escapeHtml(act.subtitle)}</span>` : badge}
+                        </div>
+                      </div>
+                      <svg class="w-4 h-4 text-neutral-500 group-hover:text-white group-hover:translate-x-0.5 transition-all" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                    </div>
+                  </a>
+                `;
+              }).join('')}
+            </div>
+
+            <!-- Footer Badge -->
+            <div class="text-center text-[11px] text-neutral-600 font-mono">
+              /r/${escapeHtml(slug)} · TAPLOCAL.IN
+            </div>
+          </div>
+        </body>
+        </html>
+      `);
     }
 
     // Preserve any search parameters passed to the short link (e.g. ?utm_campaign=xyz)
@@ -828,20 +935,20 @@ async function startServer() {
                 </div>
               </div>
 
-              <!-- LOW RATING (1-3 STARS) -> PRIVATE OWNER FEEDBACK GATE -->
+              <!-- FEEDBACK / HONEST REVIEW SECTION -->
               <div id="lowRatingSection" class="hidden pt-2 border-t border-neutral-800/80 space-y-4 text-left">
                 <div class="space-y-1">
-                  <div class="flex items-center gap-1.5 text-amber-400 text-xs font-semibold">
-                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 12h6M12 9v6"/></svg>
-                    <span>Direct Private Channel to Management</span>
+                  <div class="flex items-center gap-1.5 text-neutral-400 text-xs font-semibold">
+                    <svg class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span>Direct Feedback for ${bName}</span>
                   </div>
-                  <h3 class="text-base font-bold text-white">We're so sorry your visit didn't meet expectations.</h3>
-                  <p class="text-xs text-neutral-400">Please tell us what went wrong so management can personally make it right for you.</p>
+                  <h3 class="text-base font-bold text-white">We appreciate your honest feedback.</h3>
+                  <p class="text-xs text-neutral-400">Please share your experience so the team can improve, or post your review directly to Google.</p>
                 </div>
 
                 <div class="space-y-1.5">
-                  <label class="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">What happened? *</label>
-                  <textarea id="complaintInput" rows="3" placeholder="Tell us about the wait time, service, or food..." class="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-amber-500"></textarea>
+                  <label class="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">How can we improve? *</label>
+                  <textarea id="complaintInput" rows="3" placeholder="Tell us about the wait time, service, or quality..." class="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-amber-500"></textarea>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2 text-xs">
@@ -849,19 +956,24 @@ async function startServer() {
                   <input id="custContactInput" type="text" placeholder="Email or Phone" class="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-white text-xs placeholder-neutral-600" />
                 </div>
 
-                <button id="sendFeedbackBtn" type="button" class="w-full py-3 px-4 rounded-xl bg-white hover:bg-neutral-100 text-neutral-950 font-bold text-xs shadow-lg transition-all">
-                  Send Private Feedback to Owner
-                </button>
+                <div class="space-y-2 pt-1">
+                  <button id="sendFeedbackBtn" type="button" class="w-full py-3 px-4 rounded-xl bg-white hover:bg-neutral-100 text-neutral-950 font-bold text-xs shadow-lg transition-all">
+                    Send Feedback to Team
+                  </button>
+                  <a href="${gUrl}" target="_blank" class="block w-full py-2.5 px-4 rounded-xl bg-neutral-950 border border-neutral-800 text-neutral-300 hover:text-white text-center font-semibold text-xs transition-colors">
+                    Or Post Directly on Google Reviews ↗
+                  </a>
+                </div>
 
                 <div id="feedbackThanks" class="hidden p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 text-center space-y-2">
-                  <p class="text-xs text-emerald-300 font-bold">Thank you for letting us know directly!</p>
-                  <p class="text-[11px] text-neutral-400">Your message has been sent directly to the manager's priority inbox and we will follow up with you promptly.</p>
+                  <p class="text-xs text-emerald-300 font-bold">Thank you for sharing your feedback!</p>
+                  <p class="text-[11px] text-neutral-400">Your comments have been received and help us continually improve.</p>
                 </div>
               </div>
             </div>
 
             <div class="text-center text-[11px] text-neutral-600">
-              Protected by <span class="text-neutral-400 font-semibold">TapLocal Review Gatekeeper</span>
+              Powered by <span class="text-neutral-400 font-semibold">TapLocal</span>
             </div>
           </div>
 
@@ -1320,12 +1432,13 @@ async function startServer() {
 
   // 1. Generate Batch of Pre-Printed / Unassigned QR Codes
   app.post('/api/batch-qr/generate', (req: Request, res: Response) => {
-    const { batchName = 'Batch QR Stock', prefix = 'qr', count = 12, ownerId, ownerEmail, ownerName } = req.body;
+    const { batchName = 'Batch QR Stock', prefix = 'qr', count = 12, ownerId, ownerEmail, ownerName, batchPassword } = req.body;
     const num = Math.min(Math.max(parseInt(count, 10) || 12, 1), 250);
 
     const db = loadDatabase();
     const batchId = `batch_${Date.now()}`;
     const cleanPrefix = (prefix || 'qr').toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^-|-$/g, '') || 'qr';
+    const cleanBatchPassword = batchPassword && typeof batchPassword === 'string' && batchPassword.trim().length > 0 ? batchPassword.trim() : undefined;
 
     const newLinks: LinkRecord[] = [];
     const now = new Date().toISOString();
@@ -1345,6 +1458,7 @@ async function startServer() {
         batchId,
         batchName,
         batchIndex: i,
+        batchPassword: cleanBatchPassword,
         createdAt: now,
         updatedAt: now,
         tags: ['Pre-Printed', 'Batch Stock'],
@@ -1369,6 +1483,7 @@ async function startServer() {
       success: true,
       batchId,
       batchName,
+      batchPassword: cleanBatchPassword,
       count: newLinks.length,
       links: newLinks,
     });
@@ -1381,27 +1496,38 @@ async function startServer() {
       destinationUrl,
       title,
       adminPassword,
+      batchPassword,
       contentType,
       presentationMode,
       vcardData,
       wifiData,
       reviewGate,
+      hubConfig,
     } = req.body;
 
-    if (!adminPassword || adminPassword !== 'P4prince.com') {
-      return res.status(401).json({ error: 'Invalid admin verification password. Please use P4prince.com' });
+    const db = loadDatabase();
+    const link = db.links.find((l) => l.slug.toLowerCase() === (slug || '').toLowerCase());
+
+    if (!link) {
+      return res.status(404).json({ error: 'QR Code not found.' });
+    }
+
+    const providedPassword = (adminPassword || batchPassword || '').trim();
+    const isAuthorized = link.batchPassword
+      ? (providedPassword === link.batchPassword || providedPassword === 'P4prince.com')
+      : (providedPassword === 'P4prince.com');
+
+    if (!isAuthorized) {
+      return res.status(401).json({
+        error: link.batchPassword
+          ? 'Invalid batch password. Please enter the password assigned to this QR batch.'
+          : 'Invalid admin verification password. Please use P4prince.com'
+      });
     }
 
     let target = (destinationUrl || '').trim();
     if (target && !target.startsWith('http://') && !target.startsWith('https://') && !target.startsWith('data:') && !target.startsWith('WIFI:')) {
       target = 'https://' + target;
-    }
-
-    const db = loadDatabase();
-    const link = db.links.find((l) => l.slug.toLowerCase() === slug.toLowerCase());
-
-    if (!link) {
-      return res.status(404).json({ error: 'QR Code not found.' });
     }
 
     link.destinationUrl = target;
@@ -1413,6 +1539,7 @@ async function startServer() {
     if (vcardData) link.vcardData = vcardData;
     if (wifiData) link.wifiData = wifiData;
     if (reviewGate) link.reviewGate = reviewGate;
+    if (hubConfig) link.hubConfig = hubConfig;
     link.updatedAt = new Date().toISOString();
 
     saveDatabase(db);
@@ -1431,6 +1558,8 @@ async function startServer() {
       vcardData,
       wifiData,
       reviewGate,
+      hubConfig,
+      batchPassword,
     } = req.body;
 
     let target = (destinationUrl || '').trim();
@@ -1457,6 +1586,8 @@ async function startServer() {
         vcardData,
         wifiData,
         reviewGate,
+        hubConfig,
+        batchPassword,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         tags: ['Assigned', 'Mobile Scan'],
@@ -1477,6 +1608,8 @@ async function startServer() {
       if (vcardData) link.vcardData = vcardData;
       if (wifiData) link.wifiData = wifiData;
       if (reviewGate) link.reviewGate = reviewGate;
+      if (hubConfig) link.hubConfig = hubConfig;
+      if (batchPassword !== undefined) link.batchPassword = batchPassword;
       link.updatedAt = new Date().toISOString();
     }
 
@@ -1555,6 +1688,8 @@ async function startServer() {
       vcardData,
       wifiData,
       reviewGate,
+      hubConfig,
+      batchPassword,
       quantity = 1,
     } = req.body;
 
@@ -1642,6 +1777,8 @@ async function startServer() {
         vcardData,
         wifiData,
         reviewGate,
+        hubConfig: hubConfig && typeof hubConfig === 'object' ? hubConfig : undefined,
+        batchPassword: batchPassword && typeof batchPassword === 'string' ? batchPassword.trim() : undefined,
       };
 
       createdRecords.push(newRecord);
@@ -1712,6 +1849,11 @@ async function startServer() {
       contentType,
       dynamicButton,
       presentationMode,
+      vcardData,
+      wifiData,
+      reviewGate,
+      hubConfig,
+      batchPassword,
     } = req.body;
 
     const db = loadDatabase();
@@ -1723,18 +1865,13 @@ async function startServer() {
 
     const current = db.links[linkIndex];
 
-    if (destinationUrl) {
-      destinationUrl = destinationUrl.trim();
-      if (!destinationUrl.startsWith('http://') && !destinationUrl.startsWith('https://')) {
-        destinationUrl = 'https://' + destinationUrl;
+    if (destinationUrl !== undefined) {
+      let dest = (destinationUrl || '').trim();
+      if (dest && !dest.startsWith('http://') && !dest.startsWith('https://') && !dest.startsWith('data:') && !dest.startsWith('WIFI:')) {
+        dest = 'https://' + dest;
       }
-      try {
-        new URL(destinationUrl);
-      } catch {
-        return res.status(400).json({ error: 'Please enter a valid destination URL.' });
-      }
-      current.destinationUrl = destinationUrl;
-      current.isAssigned = true; // Mark batch stock as activated once assigned
+      current.destinationUrl = dest;
+      current.isAssigned = Boolean(dest); // Mark batch stock as activated once assigned
     }
 
     if (typeof title === 'string') current.title = title.trim();
@@ -1744,6 +1881,11 @@ async function startServer() {
     if (contentType) current.contentType = contentType;
     if (dynamicButton !== undefined) current.dynamicButton = dynamicButton;
     if (presentationMode) current.presentationMode = presentationMode;
+    if (vcardData !== undefined) current.vcardData = vcardData;
+    if (wifiData !== undefined) current.wifiData = wifiData;
+    if (reviewGate !== undefined) current.reviewGate = reviewGate;
+    if (hubConfig !== undefined) current.hubConfig = hubConfig;
+    if (batchPassword !== undefined) current.batchPassword = batchPassword;
 
     if (qrSettings && typeof qrSettings === 'object') {
       current.qrSettings = {
@@ -1960,48 +2102,129 @@ async function startServer() {
 
   // 1. AI 5-Star Google Review Generator (Powered by Gemini 3.8 Flash)
   app.post('/api/ai/generate-review', async (req: Request, res: Response) => {
-    const { businessName = 'Local Business', businessCategory = 'Service', praiseTags = [], customNotes = '', tone = 'enthusiastic' } = req.body;
+    const { businessName = 'Local Business', businessCategory = 'Local Business', praiseTags = [], customNotes = '', tone = 'friendly' } = req.body;
 
-    const tagsText = Array.isArray(praiseTags) && praiseTags.length > 0 ? praiseTags.join(', ') : 'great service, friendly team';
+    const tagsText = Array.isArray(praiseTags) && praiseTags.length > 0 ? praiseTags.join(', ') : 'great service, friendly staff';
+    const catLower = (businessCategory || '').toLowerCase();
 
-    // Best-in-class fallback drafts in case API key is absent or offline
-    const fallbackReviews = [
+    // Category-tailored realistic human fallback drafts (zero AI clichés)
+    let fallbackReviews = [
       {
         id: 1,
-        title: 'Quick & Enthusiastic',
-        text: `Had a wonderful experience at ${businessName}! The service was top notch and everything exceeded my expectations. Key highlights: ${tagsText}. Absolutely 5 stars!`,
+        title: 'Quick & Genuine',
+        text: `Really great experience at ${businessName}. The staff was super helpful, welcoming, and everything went smoothly from start to finish (${tagsText}). Will definitely come back!`,
       },
       {
         id: 2,
         title: 'Detailed Highlights',
-        text: `I recently visited ${businessName} and couldn't be happier. From start to finish, the staff were attentive, the atmosphere was wonderful, and the quality was outstanding. Definitely worth checking out!`,
+        text: `Stopped by ${businessName} recently and was really pleased. Clean space, attentive team, and high quality work. You can tell they actually care about their customers. Highly recommended!`,
       },
       {
         id: 3,
-        title: 'Staff & Experience Shoutout',
-        text: `Five stars for ${businessName}! What stood out most was how welcoming and professional everyone was (${tagsText}). Will definitely be returning and recommending to others!`,
+        title: 'Personal Shoutout',
+        text: `Five stars for ${businessName}! The atmosphere is great and the team went out of their way to make sure I had everything I needed (${tagsText}). Glad to support a great local business.`,
       },
     ];
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (catLower.includes('food') || catLower.includes('restaurant') || catLower.includes('cafe') || catLower.includes('bakery') || catLower.includes('bar') || catLower.includes('pizza') || catLower.includes('diner') || catLower.includes('trattoria') || catLower.includes('bistro')) {
+      fallbackReviews = [
+        {
+          id: 1,
+          title: 'Fresh & Delicious',
+          text: `The food was delicious, came out hot and fresh, and our server was super attentive. Definitely coming back for more!`,
+        },
+        {
+          id: 2,
+          title: 'Great Dining Vibe',
+          text: `Such a lovely spot! Great flavors, generous portions, and the staff made us feel right at home (${tagsText}). Can't wait to bring friends next time.`,
+        },
+        {
+          id: 3,
+          title: 'Top Recommendation',
+          text: `Everything we ordered was 10/10. Quick service, clean dining room, and friendly staff. Best meal I've had in a while!`,
+        },
+      ];
+    } else if (catLower.includes('salon') || catLower.includes('barber') || catLower.includes('spa') || catLower.includes('hair') || catLower.includes('nail')) {
+      fallbackReviews = [
+        {
+          id: 1,
+          title: 'Loved the Results',
+          text: `Walked out feeling amazing! They took their time, listened carefully to what I wanted, and nailed it. Very skilled and friendly team.`,
+        },
+        {
+          id: 2,
+          title: 'Super Clean & Welcoming',
+          text: `My new regular spot! Beautiful, clean salon with a relaxing atmosphere. The staff is warm and so detail-oriented (${tagsText}).`,
+        },
+        {
+          id: 3,
+          title: 'Consistent & Professional',
+          text: `Always consistent and top tier service. Great attention to detail and no rushing through the appointment. 5 stars all the way!`,
+        },
+      ];
+    } else if (catLower.includes('dental') || catLower.includes('clinic') || catLower.includes('health') || catLower.includes('doctor') || catLower.includes('med')) {
+      fallbackReviews = [
+        {
+          id: 1,
+          title: 'Gentle & Clear',
+          text: `The team at ${businessName} puts you completely at ease. Very gentle, explained every step clearly, and zero wait time.`,
+        },
+        {
+          id: 2,
+          title: 'Thorough & Kind',
+          text: `Extremely clean and modern facility. The staff was kind and patient, and the doctor answered all my questions without rushing (${tagsText}).`,
+        },
+        {
+          id: 3,
+          title: 'Highly Recommended',
+          text: `Best experience I've had at a clinic. Professional front desk, comfortable environment, and very caring staff. Thank you!`,
+        },
+      ];
+    } else if (catLower.includes('auto') || catLower.includes('repair') || catLower.includes('car') || catLower.includes('mechanic') || catLower.includes('detail')) {
+      fallbackReviews = [
+        {
+          id: 1,
+          title: 'Honest & Prompt',
+          text: `Honest, reliable, and fair pricing. Diagnosed the issue quickly and had my car ready right when promised. Great shop!`,
+        },
+        {
+          id: 2,
+          title: 'Quality Workmanship',
+          text: `Top notch service at ${businessName}. Transparent pricing, explained everything clearly, and great quality workmanship (${tagsText}).`,
+        },
+        {
+          id: 3,
+          title: 'Trustworthy Service',
+          text: `Hard to find automotive shops you can truly trust, but these guys are the real deal. Friendly, fast turnaround, and zero surprises.`,
+        },
+      ];
+    }
+
+    if (!process.env.GEMINI_API_KEY || !ai) {
       return res.json({ reviews: fallbackReviews });
     }
 
     try {
-      const prompt = `You are a genuine local customer writing an authentic, positive 5-star Google review for "${businessName}" (${businessCategory}).
-Customer highlights and loved aspects: ${tagsText}.
-Specific details mentioned by customer: ${customNotes || 'none'}.
-Desired tone: ${tone}.
+      const prompt = `You are a real, genuine customer writing an authentic, human 5-star Google review for "${businessName}", which is a "${businessCategory}".
+Customer selected highlights: ${tagsText}.
+Specific personal note from customer: ${customNotes || 'none'}.
+Tone: ${tone}.
 
-Generate exactly 3 varied, natural-sounding, human Google review draft options that avoid generic AI clichés:
-Option 1: Short & punchy (2-3 sentences)
-Option 2: Detailed and descriptive (3-5 sentences)
-Option 3: Warm personal shoutout focusing on staff and overall atmosphere (2-4 sentences)
+STRICT INSTRUCTIONS FOR REAL, ORGANIC REVIEWS:
+1. Write like an actual human typing a review on their smartphone after a good experience.
+2. NEVER use AI buzzwords or marketing fluff like "testament to excellence", "delve", "orchestrated", "par excellence", "game-changer", "plethora", "beacon of quality", "nestled".
+3. Use category-authentic details for a "${businessCategory}" (e.g. food taste, wait time, haircut technique, bedside manner, fair pricing, clean workspace).
+4. Keep the wording relaxed, realistic, positive, and conversational.
+
+Generate exactly 3 varied review options:
+Option 1: Short & punchy (2-3 sentences, direct and genuine)
+Option 2: Detailed and descriptive (3-4 sentences, specific highlights)
+Option 3: Warm personal shoutout to the staff, atmosphere, and service (2-3 sentences)
 
 Respond ONLY with valid JSON in this exact structure:
 {
   "reviews": [
-    { "id": 1, "title": "Quick & Enthusiastic", "text": "..." },
+    { "id": 1, "title": "Quick & Authentic", "text": "..." },
     { "id": 2, "title": "Detailed Highlights", "text": "..." },
     { "id": 3, "title": "Staff & Atmosphere", "text": "..." }
   ]
@@ -2018,7 +2241,7 @@ Respond ONLY with valid JSON in this exact structure:
       const responseText = aiResponse.text?.trim() || '';
       try {
         const parsed = JSON.parse(responseText);
-        if (parsed.reviews && Array.isArray(parsed.reviews)) {
+        if (parsed.reviews && Array.isArray(parsed.reviews) && parsed.reviews.length > 0) {
           return res.json(parsed);
         }
       } catch (err) {
@@ -2038,7 +2261,7 @@ Respond ONLY with valid JSON in this exact structure:
 
     const fallbackReply = `Dear ${customerName},\n\nThank you for reaching out and sharing your honest feedback with us. I am truly sorry to hear that your recent experience fell short of the high standards we pride ourselves on. We take your comments seriously and are already addressing this with our team. I would love the opportunity to connect with you directly to make this right. Please feel free to call or reply so we can ensure your next visit is nothing short of exceptional.\n\nWarm regards,\nManagement Team`;
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.GEMINI_API_KEY || !ai) {
       return res.json({ reply: fallbackReply });
     }
 

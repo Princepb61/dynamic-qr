@@ -406,7 +406,7 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
             </div>
           )}
 
-          {/* LOW RATING (1-3 STARS) -> PRIVATE OWNER FEEDBACK GATE */}
+          {/* HONEST FEEDBACK SECTION */}
           {isLowRating && (
             <div className="pt-2 border-t border-neutral-800/80 space-y-4 text-left animate-in fade-in slide-in-from-bottom-2 duration-300">
               {feedbackSent ? (
@@ -416,34 +416,34 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
                   </div>
                   <h4 className="text-base font-bold text-white">Thank you for letting us know!</h4>
                   <p className="text-xs text-neutral-300 leading-relaxed">
-                    Your message has been sent directly to the owner & general manager. We deeply care about our guests and will review this with our team right away.
+                    Your comments have been received and help our team continually improve.
                   </p>
                 </div>
               ) : (
                 <form onSubmit={handleSubmitLowFeedback} className="space-y-4">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-1.5 text-amber-400 text-xs font-semibold">
-                      <ShieldCheck className="w-4 h-4" />
-                      <span>Direct Private Channel to Management</span>
+                    <div className="flex items-center gap-1.5 text-neutral-400 text-xs font-semibold">
+                      <MessageSquare className="w-4 h-4 text-amber-400" />
+                      <span>Direct Feedback for {businessName}</span>
                     </div>
                     <h3 className="text-base font-bold text-white">
-                      We're so sorry to hear your visit wasn't perfect.
+                      We appreciate your honest feedback.
                     </h3>
                     <p className="text-xs text-neutral-400">
-                      Please tell us what went wrong so the manager can personally make it right for you.
+                      Please let us know how we can improve, or write a direct review on Google.
                     </p>
                   </div>
 
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
-                      What happened? <span className="text-rose-400">*</span>
+                      How can we improve? <span className="text-rose-400">*</span>
                     </label>
                     <textarea
                       required
                       rows={3}
                       value={feedbackText}
                       onChange={(e) => setFeedbackText(e.target.value)}
-                      placeholder="Tell us about the wait time, food quality, or customer service..."
+                      placeholder="Tell us about the wait time, service, or quality..."
                       className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors"
                     />
                   </div>
@@ -455,7 +455,7 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
                         type="text"
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
-                        placeholder="John D."
+                        placeholder="Your name"
                         className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-700"
                       />
                     </div>
@@ -465,29 +465,39 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
                         type="text"
                         value={customerContact}
                         onChange={(e) => setCustomerContact(e.target.value)}
-                        placeholder="For owner follow-up"
+                        placeholder="For team follow-up"
                         className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-700"
                       />
                     </div>
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={isSubmittingFeedback || !feedbackText.trim()}
-                    className="w-full py-3 px-4 rounded-xl bg-neutral-100 hover:bg-white text-neutral-950 font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {isSubmittingFeedback ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Sending to Management...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-3.5 h-3.5" />
-                        <span>Send Private Feedback to Owner</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="space-y-2 pt-1">
+                    <button
+                      type="submit"
+                      disabled={isSubmittingFeedback || !feedbackText.trim()}
+                      className="w-full py-3 px-4 rounded-xl bg-neutral-100 hover:bg-white text-neutral-950 font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {isSubmittingFeedback ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Sending Feedback...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Send Feedback to Team</span>
+                        </>
+                      )}
+                    </button>
+                    <a
+                      href={config.googleReviewUrl || 'https://search.google.com/local/writereview'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full py-2.5 px-4 rounded-xl bg-neutral-950 border border-neutral-800 text-neutral-300 hover:text-white text-center font-semibold text-xs transition-colors"
+                    >
+                      Or Post Directly on Google Reviews ↗
+                    </a>
+                  </div>
                 </form>
               )}
             </div>
@@ -496,8 +506,8 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
 
         {/* Footer */}
         <div className="text-center text-[11px] text-neutral-600 flex items-center justify-center gap-1">
-          <span>Protected by</span>
-          <span className="text-neutral-400 font-semibold">TapLocal Review Gatekeeper</span>
+          <span>Powered by</span>
+          <span className="text-neutral-400 font-semibold">TapLocal</span>
         </div>
       </div>
     </div>

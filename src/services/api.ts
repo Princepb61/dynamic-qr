@@ -72,6 +72,7 @@ export const api = {
     ownerEmail?: string;
     ownerName?: string;
     labelPreset?: LabelPresetType;
+    batchPassword?: string;
   }): Promise<{ success: boolean; batchId: string; batchName: string; count: number; links: LinkRecord[] }> {
     // 1. Save in Firestore Cloud Database for cross-device sync
     try {
@@ -128,7 +129,7 @@ export const api = {
    */
   async assignBatchLink(
     idOrSlug: string,
-    payload: { destinationUrl: string; title?: string; description?: string }
+    payload: Partial<LinkRecord> & { destinationUrl: string; title?: string; description?: string }
   ): Promise<{ success: boolean; message: string; link: LinkRecord }> {
     let assignedLink: LinkRecord | null = null;
 

@@ -169,7 +169,6 @@ export const firestoreDb = {
           id: `link_${clean}`,
           slug: clean,
           title: payload.title?.trim() || `QR Code (${clean})`,
-          destinationUrl: target,
           description: payload.description?.trim() || 'Assigned via mobile scan',
           isActive: true,
           isAssigned: true,
@@ -187,6 +186,7 @@ export const firestoreDb = {
             margin: 2,
           },
           ...payload,
+          destinationUrl: target,
         };
 
     // Save to Firestore using clean slug as doc ID for instant O(1) lookup

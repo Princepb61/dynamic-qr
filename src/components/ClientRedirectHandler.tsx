@@ -28,6 +28,8 @@ import {
   EyeOff,
   User,
   Share2,
+  Layers,
+  Utensils,
 } from 'lucide-react';
 import { getLast4Letters } from '../utils/a4QrHelper';
 import { downloadVCard, generateWifiString, generateVCardString } from '../utils/vcardHelper';
@@ -37,7 +39,7 @@ interface ClientRedirectHandlerProps {
   slug: string;
 }
 
-type PresetType = 'google_review' | 'whatsapp' | 'instagram' | 'facebook' | 'wifi' | 'vcard' | 'url';
+type PresetType = 'google_review' | 'whatsapp' | 'instagram' | 'facebook' | 'wifi' | 'vcard' | 'url' | 'multi_action_hub';
 
 export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ slug }) => {
   const cleanSlug = slug.trim().toLowerCase().replace(/^\/r\//, '').replace(/^\//, '');
@@ -193,14 +195,17 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
         }
 
         if (found.isActive) {
-          // If interactive presentation mode (WiFi, vCard, Review Gate, Button), stay on page!
+          // If interactive presentation mode (Hub, WiFi, vCard, Review Gate, Button), stay on page!
           const isInteractive =
+            found.presentationMode === 'multi_action_hub' ||
             found.presentationMode === 'wifi_card' ||
             found.presentationMode === 'vcard_profile' ||
             found.presentationMode === 'review_gate' ||
             found.presentationMode === 'button_page' ||
+            found.contentType === 'multi_action_hub' ||
             found.contentType === 'wifi' ||
             found.contentType === 'vcard' ||
+            Boolean(found.hubConfig?.enabled) ||
             Boolean(found.reviewGate?.enabled);
 
           if (!isInteractive && found.destinationUrl) {
@@ -248,17 +253,42 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
   const handleAdminAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
+    const pass = authPassword.trim();
+
+    if (!pass) {
+      setAuthError('Please enter password.');
+      return;
+    }
+
+    // 1. If link belongs to a password-protected batch, verify batch password
+    if (link?.batchPassword) {
+      if (pass === link.batchPassword || pass === 'P4prince.com') {
+        setIsAdminLoggedIn(true);
+        return;
+      } else {
+        setAuthError('Invalid batch password. Please enter the password assigned to this QR batch.');
+        return;
+      }
+    }
+
+    // 2. Direct master admin password bypass
+    if (pass === 'P4prince.com') {
+      setIsAdminLoggedIn(true);
+      return;
+    }
+
+    // 3. Fallback to API login
     try {
       setIsAuthenticating(true);
       const res = await api.login({
         email: authEmail.trim(),
-        password: authPassword,
+        password: pass,
       });
       localStorage.setItem('dynamicqr_user', JSON.stringify(res.user));
       localStorage.setItem('dynamicqr_token', res.token);
       setIsAdminLoggedIn(true);
     } catch (err: any) {
-      setAuthError(err.message || 'Authentication failed. Please verify administrator credentials.');
+      setAuthError(err.message || 'Authentication failed. Please verify credentials.');
     } finally {
       setIsAuthenticating(false);
     }
@@ -272,6 +302,7 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
     vcardData?: VCardData;
     wifiData?: WifiData;
     reviewGate?: any;
+    hubConfig?: any;
     title: string;
   } => {
     switch (activePreset) {
@@ -395,6 +426,44 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
         };
       }
 
+      case 'multi_action_hub': {
+        const hTitle = assignTitle.trim() || `Smart Link Hub (${cleanSlug})`;
+        return {
+          destinationUrl: fullRedirectUrl,
+          contentType: 'multi_action_hub',
+          presentationMode: 'multi_action_hub',
+          hubConfig: {
+            enabled: true,
+            heading: hTitle,
+            subheading: 'Choose an option below',
+            actions: [
+              {
+                id: '1',
+                type: 'google_review',
+                title: '5-Star Google Review',
+                destinationUrl: googlePlaceIdOrUrl.trim() || undefined,
+                enabled: true,
+              },
+              {
+                id: '2',
+                type: 'whatsapp',
+                title: 'WhatsApp Ordering & Chat',
+                phone: waPhone.trim() || undefined,
+                enabled: true,
+              },
+              {
+                id: '3',
+                type: 'website',
+                title: 'Official Website',
+                destinationUrl: customUrl.trim() || undefined,
+                enabled: true,
+              },
+            ],
+          },
+          title: hTitle,
+        };
+      }
+
       case 'url':
       default: {
         let target = customUrl.trim();
@@ -439,6 +508,7 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
         vcardData: payload.vcardData,
         wifiData: payload.wifiData,
         reviewGate: payload.reviewGate,
+        hubConfig: payload.hubConfig,
       });
 
       // Clear pending slug
@@ -449,8 +519,12 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
       setAssignSuccess(`QR code /r/${link.slug} is now live and activated!`);
       setLink(assigned.link);
 
-      // If interactive card (WiFi or vCard), stay on screen to show preview!
-      if (payload.presentationMode === 'wifi_card' || payload.presentationMode === 'vcard_profile') {
+      // If interactive card (Hub, WiFi, or vCard), stay on screen to show preview!
+      if (
+        payload.presentationMode === 'multi_action_hub' ||
+        payload.presentationMode === 'wifi_card' ||
+        payload.presentationMode === 'vcard_profile'
+      ) {
         setIsAssigning(false);
         return;
       }
@@ -545,12 +619,16 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
             </div>
           </div>
 
-          {/* STEP A: If NOT logged in, prompt for admin password right on this screen */}
+          {/* STEP A: Prompt for batch password or admin password */}
           {!isAdminLoggedIn ? (
             <div className="space-y-4 pt-3 border-t border-neutral-800">
               <div className="p-3.5 bg-neutral-800/80 rounded-2xl border border-neutral-700/80 text-xs text-neutral-300 flex items-start gap-2.5">
-                <Lock className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-                <p>Sign in with your administrator ID and password to link this QR code on the spot.</p>
+                <Lock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <p>
+                  {link.batchPassword
+                    ? 'This QR code is part of a password-protected batch. Enter this batch’s password to assign without login.'
+                    : 'Enter password to unlock and assign this QR code on the spot.'}
+                </p>
               </div>
 
               {authError && (
@@ -560,25 +638,28 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
               )}
 
               <form onSubmit={handleAdminAuth} className="space-y-3">
-                <div>
-                  <label className="block text-xs font-semibold text-neutral-300 mb-1">Admin Email</label>
-                  <input
-                    type="email"
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    placeholder="p0667500@gmail.com"
-                    required
-                    className="w-full px-3.5 py-2.5 text-xs font-mono bg-neutral-800 border border-neutral-700 rounded-xl text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
+                {!link.batchPassword && (
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-300 mb-1">Admin Email (Optional)</label>
+                    <input
+                      type="email"
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      placeholder="p0667500@gmail.com"
+                      className="w-full px-3.5 py-2.5 text-xs font-mono bg-neutral-800 border border-neutral-700 rounded-xl text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                )}
 
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-300 mb-1">Password</label>
+                  <label className="block text-xs font-semibold text-neutral-300 mb-1">
+                    {link.batchPassword ? 'Batch Security Password' : 'Batch Password or Master Password'}
+                  </label>
                   <input
                     type="password"
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
-                    placeholder="••••••••••••"
+                    placeholder="Enter password..."
                     required
                     autoFocus
                     className="w-full px-3.5 py-2.5 text-xs bg-neutral-800 border border-neutral-700 rounded-xl text-white focus:outline-none focus:border-indigo-500"
@@ -591,7 +672,7 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
                   className="w-full min-h-[44px] py-2.5 px-4 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] rounded-xl transition-all shadow-xs flex items-center justify-center gap-2"
                 >
                   <ShieldCheck className="w-4 h-4" />
-                  <span>{isAuthenticating ? 'Verifying...' : 'Unlock & Choose Destination Preset'}</span>
+                  <span>{isAuthenticating ? 'Verifying...' : 'Unlock & Choose Destination'}</span>
                 </button>
               </form>
             </div>
@@ -737,14 +818,34 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
                     </div>
                   </button>
 
-                  {/* Preset 7: Custom Website URL */}
+                  {/* Preset 7: Multi-Action Smart Hub */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivePreset('multi_action_hub');
+                      if (!assignTitle || assignTitle.includes('QR Code')) setAssignTitle('Smart Hub');
+                    }}
+                    className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all ${
+                      activePreset === 'multi_action_hub'
+                        ? 'bg-indigo-500/10 border-indigo-500/60 text-indigo-300 shadow-sm'
+                        : 'bg-neutral-800/60 border-neutral-700/60 text-neutral-400 hover:text-white hover:bg-neutral-800'
+                    }`}
+                  >
+                    <Layers className="w-5 h-5 text-indigo-400 mb-1" />
+                    <div>
+                      <span className="font-bold text-xs block text-white">Smart Hub</span>
+                      <span className="text-[10px] text-neutral-400">All-In-One Landing</span>
+                    </div>
+                  </button>
+
+                  {/* Preset 8: Custom Website URL */}
                   <button
                     type="button"
                     onClick={() => {
                       setActivePreset('url');
                       if (!assignTitle || assignTitle.includes('QR Code')) setAssignTitle('Website Link');
                     }}
-                    className={`p-3 rounded-2xl border text-left flex flex-col justify-between col-span-2 transition-all ${
+                    className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all ${
                       activePreset === 'url'
                         ? 'bg-indigo-500/10 border-indigo-500/60 text-indigo-300 shadow-sm'
                         : 'bg-neutral-800/60 border-neutral-700/60 text-neutral-400 hover:text-white hover:bg-neutral-800'
@@ -753,7 +854,7 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
                     <Globe className="w-5 h-5 text-indigo-400 mb-1" />
                     <div>
                       <span className="font-bold text-xs block text-white">Custom Web URL</span>
-                      <span className="text-[10px] text-neutral-400">Direct Online Menu, Store, or App</span>
+                      <span className="text-[10px] text-neutral-400">Direct Online Link</span>
                     </div>
                   </button>
                 </div>
@@ -1189,6 +1290,101 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
             >
               Open Full Admin Console
             </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 3.5 ASSIGNED QR CODE: MULTI-ACTION SMART HUB PRESENTATION
+  if (link.presentationMode === 'multi_action_hub' || link.contentType === 'multi_action_hub' || (link.hubConfig && link.hubConfig.enabled)) {
+    const hub = link.hubConfig || {
+      enabled: true,
+      heading: link.title,
+      subheading: link.description || 'Welcome! Choose an option below',
+      actions: [],
+    };
+    const activeActions = (hub.actions || []).filter((a) => a.enabled !== false);
+    return (
+      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col justify-between p-4 sm:p-6 antialiased selection:bg-indigo-500 selection:text-white font-sans">
+        <div className="max-w-md w-full mx-auto my-auto space-y-6">
+          {/* Brand Header */}
+          <div className="text-center space-y-2">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-600/15 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mx-auto shadow-lg shadow-indigo-500/10">
+              <Layers className="w-8 h-8" />
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">{hub.heading || link.title}</h1>
+            <p className="text-xs sm:text-sm text-neutral-400 max-w-xs mx-auto leading-relaxed">{hub.subheading || link.description || 'Tap any option below to connect'}</p>
+          </div>
+
+          {/* Action Buttons List */}
+          <div className="space-y-3">
+            {activeActions.map((act) => {
+              let actionHref = act.destinationUrl || '#';
+              let icon = <Globe className="w-5 h-5 text-indigo-400" />;
+              let badge = '';
+
+              if (act.type === 'google_review') {
+                actionHref = act.destinationUrl || (act.googlePlaceId ? `https://search.google.com/local/writereview?placeid=${encodeURIComponent(act.googlePlaceId)}` : '#');
+                icon = <Star className="w-5 h-5 text-amber-400 fill-amber-400" />;
+                badge = '5-Star Review';
+              } else if (act.type === 'whatsapp') {
+                const phoneDigits = (act.phone || '').replace(/[^0-9]/g, '');
+                const textMsg = encodeURIComponent(act.message || 'Hello!');
+                actionHref = `https://wa.me/${phoneDigits}?text=${textMsg}`;
+                icon = <MessageSquare className="w-5 h-5 text-emerald-400" />;
+              } else if (act.type === 'wifi') {
+                actionHref = `/r/${cleanSlug}?direct=wifi`;
+                icon = <Wifi className="w-5 h-5 text-cyan-400" />;
+              } else if (act.type === 'contact') {
+                actionHref = `/api/vcard/${cleanSlug}.vcf`;
+                icon = <User className="w-5 h-5 text-purple-400" />;
+              } else if (act.type === 'menu') {
+                actionHref = act.destinationUrl || '#';
+                icon = <Utensils className="w-5 h-5 text-orange-400" />;
+              } else if (act.type === 'location') {
+                actionHref = act.destinationUrl || (act.address ? `https://maps.google.com/?q=${encodeURIComponent(act.address)}` : '#');
+                icon = <MapPin className="w-5 h-5 text-rose-400" />;
+              } else if (act.type === 'facebook') {
+                actionHref = act.destinationUrl || `https://facebook.com/${act.handle || ''}`;
+                icon = <Share2 className="w-5 h-5 text-blue-400" />;
+              } else if (act.type === 'instagram') {
+                actionHref = act.destinationUrl || `https://instagram.com/${(act.handle || '').replace(/^@/, '')}`;
+                icon = <Share2 className="w-5 h-5 text-pink-400" />;
+              }
+
+              return (
+                <a
+                  key={act.id}
+                  href={actionHref}
+                  onClick={() => localDb.simulateScan(link.id, 'mobile')}
+                  className="group block p-4 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 rounded-2xl transition-all shadow-md active:scale-[0.98]"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                        {icon}
+                      </div>
+                      <div className="text-left">
+                        <span className="text-sm font-bold text-white block group-hover:text-indigo-300 transition-colors">
+                          {act.title}
+                        </span>
+                        {act.subtitle ? (
+                          <span className="text-[11px] text-neutral-400 block">{act.subtitle}</span>
+                        ) : badge ? (
+                          <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">{badge}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-neutral-500 group-hover:text-white group-hover:translate-x-0.5 transition-all" />
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+
+          <div className="text-center text-[11px] text-neutral-600 font-mono">
+            /r/{cleanSlug} · TAPLOCAL.IN
           </div>
         </div>
       </div>

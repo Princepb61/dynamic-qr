@@ -202,7 +202,7 @@ export default function App() {
 
   const handleUpdateDestination = async (
     id: string,
-    updates: { destinationUrl: string; title: string; description: string }
+    updates: Partial<LinkRecord>
   ) => {
     try {
       await api.updateLink(id, updates);

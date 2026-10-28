@@ -14,13 +14,12 @@ export interface BatchRecord {
   labelPreset: LabelPresetType;
   ownerId: string;
   ownerEmail?: string;
+  batchPassword?: string; // Optional password for staff self-assignment without login
   createdAt: string;
   unassignedCount?: number;
   slugs?: string[];
   links?: LinkRecord[];
 }
-
-export type QREyeShape = 'square' | 'rounded' | 'circle' | 'leaf';
 
 export interface QRSettings {
   colorDark: string;
@@ -31,13 +30,10 @@ export interface QRSettings {
   frameText?: string;
   centerIcon?: 'none' | 'link' | 'wifi' | 'phone' | 'message' | 'star' | 'coffee' | 'heart' | 'utensils';
   centerLogoUrl?: string;
-  // Visual Studio Upgrades
   gradientEnabled?: boolean;
   gradientColor1?: string;
   gradientColor2?: string;
   gradientDirection?: 'to-r' | 'to-br' | 'to-b' | 'to-bl';
-  eyeShape?: QREyeShape;
-  eyeColor?: string;
   dotsColor?: string;
   logoPadding?: number;
   logoBorder?: boolean;
@@ -81,13 +77,11 @@ export interface DynamicButtonConfig {
 export interface ReviewGateConfig {
   enabled: boolean;
   businessName?: string;
-  businessCategory?: string;
+  businessCategory?: string; // e.g. Restaurant, Dental Clinic, Boutique, Auto Service, etc.
   googleReviewUrl: string;
-  minRatingForGoogle: number; // typically 4 or 5
+  minRatingForGoogle: number; // 4 or 5
   praiseTags: string[];
   customTone?: 'enthusiastic' | 'friendly' | 'professional' | 'short_and_sweet';
-  privateFeedbackEmail?: string;
-  privateFeedbackPhone?: string;
   allowCustomNote?: boolean;
 }
 
@@ -104,25 +98,6 @@ export interface ReviewFeedbackRecord {
   status: 'new' | 'reviewed' | 'resolved';
   ownerReply?: string;
   ownerRepliedAt?: string;
-}
-
-export interface ConditionalRule {
-  id: string;
-  label: string;
-  type: 'time' | 'device_os';
-  // Time conditions (e.g. 06:00 to 11:30 for Breakfast)
-  timeStart?: string;
-  timeEnd?: string;
-  daysOfWeek?: number[]; // [0,1,2,3,4,5,6] (0=Sun, 6=Sat)
-  // Device OS conditions
-  targetOs?: 'ios' | 'android' | 'desktop' | 'other';
-  destinationUrl: string;
-}
-
-export interface ConditionalRoutingConfig {
-  enabled: boolean;
-  rules: ConditionalRule[];
-  fallbackUrl?: string;
 }
 
 export interface VCardData {
@@ -143,6 +118,40 @@ export interface WifiData {
   hidden?: boolean;
 }
 
+export type HubActionType =
+  | 'google_review'
+  | 'whatsapp'
+  | 'menu'
+  | 'wifi'
+  | 'contact'
+  | 'website'
+  | 'facebook'
+  | 'instagram'
+  | 'location';
+
+export interface HubActionItem {
+  id: string;
+  type: HubActionType;
+  title: string;
+  subtitle?: string;
+  enabled: boolean;
+  destinationUrl?: string;
+  wifiData?: WifiData;
+  vcardData?: VCardData;
+  googlePlaceId?: string;
+  phone?: string;
+  message?: string;
+  handle?: string;
+  address?: string;
+}
+
+export interface MultiActionHubConfig {
+  enabled: boolean;
+  heading?: string;
+  subheading?: string;
+  actions: HubActionItem[];
+}
+
 export interface LinkRecord {
   id: string;
   slug: string;
@@ -150,7 +159,17 @@ export interface LinkRecord {
   destinationUrl: string;
   description?: string;
   isActive: boolean;
-  contentType?: 'url' | 'whatsapp' | 'vcard' | 'wifi' | 'text' | 'button' | 'google_review' | 'instagram' | 'facebook';
+  contentType?:
+    | 'url'
+    | 'whatsapp'
+    | 'vcard'
+    | 'wifi'
+    | 'text'
+    | 'button'
+    | 'google_review'
+    | 'instagram'
+    | 'facebook'
+    | 'multi_action_hub';
   createdAt: string;
   updatedAt: string;
   tags?: string[];
@@ -162,13 +181,20 @@ export interface LinkRecord {
   batchId?: string;
   batchName?: string;
   batchIndex?: number;
+  batchPassword?: string;
   qrSettings?: QRSettings;
   dynamicButton?: DynamicButtonConfig;
-  presentationMode?: 'instant_redirect' | 'button_page' | 'review_gate' | 'wifi_card' | 'vcard_profile';
+  presentationMode?:
+    | 'instant_redirect'
+    | 'button_page'
+    | 'review_gate'
+    | 'wifi_card'
+    | 'vcard_profile'
+    | 'multi_action_hub';
   reviewGate?: ReviewGateConfig;
-  conditionalRouting?: ConditionalRoutingConfig;
   vcardData?: VCardData;
   wifiData?: WifiData;
+  hubConfig?: MultiActionHubConfig;
 }
 
 export interface ClickRecord {
