@@ -93,6 +93,13 @@ export interface LinkRecord {
       googlePlaceId?: string;
       subtitle?: string;
       enabled?: boolean;
+      enableAiReviews?: boolean;
+      businessName?: string;
+      businessCategory?: string;
+      praiseTags?: string[];
+      customTone?: string;
+      wifiSsid?: string;
+      wifiPassword?: string;
     }>;
   };
   vcardData?: {
@@ -536,8 +543,15 @@ async function startServer() {
       `);
     }
 
-    // CHECK IF UNASSIGNED (Pre-printed QR Code Stock waiting for a link)
-    if (link.isAssigned === false || !link.destinationUrl || link.destinationUrl.trim() === '') {
+    // 1. CHECK IF MULTI-ACTION HUB (Multi-Action Hub should NEVER be blocked as unassigned)
+    const isHubActive =
+      (link.presentationMode === 'multi_action_hub' ||
+        link.contentType === 'multi_action_hub' ||
+        Boolean(link.hubConfig && link.hubConfig.enabled)) &&
+      Boolean(link.hubConfig && Array.isArray(link.hubConfig.actions) && link.hubConfig.actions.length > 0);
+
+    // 2. CHECK IF UNASSIGNED (Pre-printed QR Code Stock waiting for a link)
+    if (!isHubActive && (link.isAssigned === false || !link.destinationUrl || link.destinationUrl.trim() === '')) {
       return res.status(200).send(`
         <!DOCTYPE html>
         <html lang="en">
@@ -560,18 +574,42 @@ async function startServer() {
               </div>
             </div>
 
-            <div class="p-4 bg-neutral-900/50 rounded-xl border border-neutral-700/80 text-xs text-neutral-300 space-y-1.5">
-              <div class="font-semibold text-amber-400 flex items-center gap-1.5">
-                <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                <span>Awaiting Destination URL Assignment</span>
+            ${link.batchPassword ? `
+            <!-- Password Gate for Protected Batch QR -->
+            <div id="gateBlock" class="space-y-4">
+              <div class="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300 space-y-1">
+                <div class="font-bold flex items-center gap-1.5 text-amber-400">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  <span>Batch Security Password Required</span>
+                </div>
+                <p class="text-neutral-400 leading-relaxed">
+                  This QR code belongs to a protected batch. Please enter this batch's password to unlock the destination assignment page on your phone.
+                </p>
               </div>
-              <p class="text-neutral-400 leading-relaxed">
-                This QR code was pre-printed in bulk and scanned before a destination was linked. You can activate it now below or assign it from the Admin Panel.
-              </p>
-            </div>
 
-            <!-- Instant Phone Activation Form -->
-            <form id="activateForm" class="space-y-4">
+              <div class="space-y-3">
+                <label class="block text-xs font-semibold text-neutral-300">Enter Batch Password <span class="text-amber-400">*</span></label>
+                <input type="password" id="gatePass" placeholder="Enter batch password" autofocus class="w-full px-3.5 py-2.5 text-xs bg-neutral-900 border border-neutral-700 rounded-lg text-white font-mono focus:outline-none focus:border-amber-500">
+                <div id="gateError" class="hidden p-2.5 rounded-lg text-xs bg-red-500/20 text-red-300 border border-red-500/30 font-medium"></div>
+                <button type="button" id="gateUnlockBtn" class="w-full py-2.5 px-4 text-xs font-bold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-all shadow-md active:scale-98">
+                  Unlock QR Code
+                </button>
+              </div>
+            </div>
+            ` : ''}
+
+            <!-- Destination Assignment Form -->
+            <form id="activateForm" class="${link.batchPassword ? 'hidden' : ''} space-y-4">
+              <div class="p-4 bg-neutral-900/50 rounded-xl border border-neutral-700/80 text-xs text-neutral-300 space-y-1.5">
+                <div class="font-semibold text-emerald-400 flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>Assign Destination URL</span>
+                </div>
+                <p class="text-neutral-400 leading-relaxed">
+                  Enter your destination website or link. Physical stickers stay active forever.
+                </p>
+              </div>
+
               <div>
                 <label class="block text-xs font-semibold text-neutral-300 mb-1">Destination URL <span class="text-indigo-400">*</span></label>
                 <input type="url" id="destUrl" placeholder="https://yourwebsite.com/menu" required class="w-full px-3.5 py-2.5 text-xs bg-neutral-900 border border-neutral-700 rounded-lg text-white font-mono focus:outline-none focus:border-indigo-500">
@@ -582,11 +620,14 @@ async function startServer() {
                 <input type="text" id="linkTitle" placeholder="${escapeHtml(link.title)}" class="w-full px-3.5 py-2 text-xs bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-indigo-500">
               </div>
 
+              ${!link.batchPassword ? `
               <div>
-                <label class="block text-xs font-semibold text-neutral-300 mb-1">${link.batchPassword ? 'Batch Security Password' : 'Batch / Admin Password'} <span class="text-indigo-400">*</span></label>
-                <input type="password" id="adminPass" placeholder="${link.batchPassword ? 'Enter batch password' : 'Enter batch or admin password'}" required class="w-full px-3.5 py-2 text-xs bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-indigo-500">
-                ${link.batchPassword ? '<p class="text-[11px] text-indigo-400 mt-1">This QR is batch-protected. Enter the password assigned to this batch to activate without login.</p>' : ''}
+                <label class="block text-xs font-semibold text-neutral-300 mb-1">Admin Verification Password <span class="text-indigo-400">*</span></label>
+                <input type="password" id="adminPass" placeholder="Enter admin password (P4prince.com)" required class="w-full px-3.5 py-2 text-xs bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-indigo-500">
               </div>
+              ` : `
+              <input type="hidden" id="adminPass" value="">
+              `}
 
               <div id="statusMsg" class="hidden p-2.5 rounded-lg text-xs"></div>
 
@@ -602,9 +643,60 @@ async function startServer() {
           </div>
 
           <script>
+            const isProtected = ${Boolean(link.batchPassword)};
+            const gateBtn = document.getElementById('gateUnlockBtn');
+            const gateInput = document.getElementById('gatePass');
+            const gateError = document.getElementById('gateError');
+            const gateBlock = document.getElementById('gateBlock');
             const form = document.getElementById('activateForm');
             const msg = document.getElementById('statusMsg');
             const btn = document.getElementById('submitBtn');
+
+            if (gateBtn && gateInput) {
+              const doUnlock = async () => {
+                const pass = gateInput.value.trim();
+                if (!pass) {
+                  gateError.innerText = 'Please enter the batch password';
+                  gateError.classList.remove('hidden');
+                  return;
+                }
+                gateBtn.disabled = true;
+                gateBtn.innerText = 'Verifying...';
+
+                try {
+                  const res = await fetch('/api/batch-qr/verify-pass', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ slug: '${escapeHtml(slug)}', password: pass })
+                  });
+                  const data = await res.json();
+                  if (res.ok) {
+                    document.getElementById('adminPass').value = pass;
+                    gateBlock.classList.add('hidden');
+                    form.classList.remove('hidden');
+                    document.getElementById('destUrl').focus();
+                  } else {
+                    gateError.innerText = data.error || 'Incorrect batch password';
+                    gateError.classList.remove('hidden');
+                    gateBtn.disabled = false;
+                    gateBtn.innerText = 'Unlock QR Code';
+                  }
+                } catch (err) {
+                  gateError.innerText = 'Network error while verifying password';
+                  gateError.classList.remove('hidden');
+                  gateBtn.disabled = false;
+                  gateBtn.innerText = 'Unlock QR Code';
+                }
+              };
+
+              gateBtn.addEventListener('click', doUnlock);
+              gateInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  doUnlock();
+                }
+              });
+            }
 
             form.addEventListener('submit', async (e) => {
               e.preventDefault();
@@ -759,19 +851,28 @@ async function startServer() {
                 let actionHref = act.destinationUrl || '#';
                 let iconSvg = '';
                 let badge = '';
+                let isAiReviewButton = false;
+                let isWifiButton = false;
 
                 if (act.type === 'google_review') {
                   actionHref = act.destinationUrl || (act.googlePlaceId ? `https://search.google.com/local/writereview?placeid=${encodeURIComponent(act.googlePlaceId)}` : '#');
                   iconSvg = '<svg class="w-5 h-5 text-amber-400" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
                   badge = '<span class="text-[10px] font-bold text-amber-400 uppercase tracking-wider">5-Star Review</span>';
+                  if (act.enableAiReviews !== false) {
+                    isAiReviewButton = true;
+                  }
                 } else if (act.type === 'whatsapp') {
                   const phoneDigits = (act.phone || '').replace(/[^0-9]/g, '');
                   const textMsg = encodeURIComponent(act.message || 'Hello!');
                   actionHref = `https://wa.me/${phoneDigits}?text=${textMsg}`;
                   iconSvg = '<svg class="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
                 } else if (act.type === 'wifi') {
-                  actionHref = `/r/${escapeHtml(slug)}?direct=wifi`;
                   iconSvg = '<svg class="w-5 h-5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>';
+                  if (act.wifiSsid || act.wifiPassword || link.wifiData?.ssid) {
+                    isWifiButton = true;
+                  } else {
+                    actionHref = act.destinationUrl || '#';
+                  }
                 } else if (act.type === 'contact') {
                   actionHref = `/api/vcard/${escapeHtml(slug)}.vcf`;
                   iconSvg = '<svg class="w-5 h-5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
@@ -790,6 +891,49 @@ async function startServer() {
                 } else {
                   actionHref = act.destinationUrl || '#';
                   iconSvg = '<svg class="w-5 h-5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
+                }
+
+                if (isAiReviewButton) {
+                  const bName = escapeHtml(act.businessName || hubHeading);
+                  const bCat = escapeHtml(act.businessCategory || 'Local Business');
+                  const tagsParam = escapeHtml((act.praiseTags || []).join('||'));
+                  return `
+                    <button type="button" onclick="openReviewModal('${bName}', '${bCat}', '${escapeHtml(actionHref)}', '${tagsParam}')" class="w-full text-left group block p-4 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 rounded-2xl transition-all shadow-md active:scale-[0.98]">
+                      <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3.5">
+                          <div class="w-10 h-10 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                            ${iconSvg}
+                          </div>
+                          <div class="text-left">
+                            <span class="text-sm font-bold text-white block group-hover:text-amber-300 transition-colors">${escapeHtml(act.title)}</span>
+                            ${act.subtitle ? `<span class="text-[11px] text-neutral-400 block">${escapeHtml(act.subtitle)}</span>` : badge}
+                          </div>
+                        </div>
+                        <svg class="w-4 h-4 text-neutral-500 group-hover:text-white group-hover:translate-x-0.5 transition-all" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                      </div>
+                    </button>
+                  `;
+                }
+
+                if (isWifiButton) {
+                  const ssid = escapeHtml(act.wifiSsid || link.wifiData?.ssid || 'Guest Wi-Fi');
+                  const pass = escapeHtml(act.wifiPassword || link.wifiData?.password || '');
+                  return `
+                    <button type="button" onclick="openWifiModal('${ssid}', '${pass}')" class="w-full text-left group block p-4 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 rounded-2xl transition-all shadow-md active:scale-[0.98]">
+                      <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3.5">
+                          <div class="w-10 h-10 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                            ${iconSvg}
+                          </div>
+                          <div class="text-left">
+                            <span class="text-sm font-bold text-white block group-hover:text-cyan-300 transition-colors">${escapeHtml(act.title)}</span>
+                            <span class="text-[11px] text-neutral-400 block">${escapeHtml(act.subtitle || 'Connect to guest internet')}</span>
+                          </div>
+                        </div>
+                        <svg class="w-4 h-4 text-neutral-500 group-hover:text-white group-hover:translate-x-0.5 transition-all" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                      </div>
+                    </button>
+                  `;
                 }
 
                 return `
@@ -816,6 +960,199 @@ async function startServer() {
               /r/${escapeHtml(slug)} · TAPLOCAL.IN
             </div>
           </div>
+
+          <!-- Interactive AI Review Modal -->
+          <div id="reviewModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md">
+            <div class="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+              <div class="flex items-center justify-between border-b border-neutral-800 pb-3">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  </div>
+                  <div>
+                    <h3 id="modalBizName" class="text-sm font-bold text-white">Share Your 5-Star Experience</h3>
+                    <p id="modalBizCategory" class="text-[11px] text-neutral-400">Local Business</p>
+                  </div>
+                </div>
+                <button type="button" onclick="closeReviewModal()" class="text-neutral-400 hover:text-white p-1 text-lg leading-none">&times;</button>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-neutral-300 mb-2">What did you love most? (Tap to select)</label>
+                <div id="tagsContainer" class="flex flex-wrap gap-1.5"></div>
+              </div>
+
+              <button type="button" id="generateBtn" onclick="generateReviews()" class="w-full py-2.5 px-4 text-xs font-bold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-xl transition-all shadow-md active:scale-98">
+                Generate 5-Star Review Drafts
+              </button>
+
+              <div id="reviewsList" class="space-y-2.5 pt-1 hidden"></div>
+
+              <div class="pt-2 border-t border-neutral-800 text-center">
+                <a id="skipDirectLink" href="#" target="_blank" class="text-xs text-neutral-400 hover:text-white hover:underline">
+                  Or write your own review directly on Google &rarr;
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Interactive Wi-Fi Card Modal -->
+          <div id="wifiModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <div class="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center">
+              <div class="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 mx-auto">
+                <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-white">Connect to Guest Wi-Fi</h3>
+                <p class="text-xs text-neutral-400 mt-0.5">Use the credentials below to connect</p>
+              </div>
+
+              <div class="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 text-left space-y-2.5">
+                <div>
+                  <span class="text-[10px] uppercase font-mono text-neutral-500 block">Network (SSID)</span>
+                  <span id="wifiSsidDisplay" class="text-sm font-bold text-white font-mono"></span>
+                </div>
+                <div>
+                  <span class="text-[10px] uppercase font-mono text-neutral-500 block">Password</span>
+                  <span id="wifiPassDisplay" class="text-sm font-bold text-cyan-400 font-mono"></span>
+                </div>
+              </div>
+
+              <button type="button" id="copyWifiBtn" onclick="copyWifiPassword()" class="w-full py-2.5 px-4 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-500 rounded-xl transition-all shadow-md active:scale-98">
+                Copy Password to Clipboard
+              </button>
+
+              <button type="button" onclick="closeWifiModal()" class="w-full py-2 text-xs text-neutral-400 hover:text-white transition-colors">
+                Close
+              </button>
+            </div>
+          </div>
+
+          <script>
+            let currentBizName = '';
+            let currentBizCat = '';
+            let currentGoogleUrl = '';
+            let selectedPraiseTags = [];
+            let currentWifiPass = '';
+
+            function openReviewModal(bName, bCat, gUrl, tagsStr) {
+              currentBizName = bName;
+              currentBizCat = bCat;
+              currentGoogleUrl = gUrl;
+              selectedPraiseTags = [];
+
+              document.getElementById('modalBizName').innerText = bName;
+              document.getElementById('modalBizCategory').innerText = bCat;
+              document.getElementById('skipDirectLink').href = gUrl;
+
+              const rawTags = tagsStr ? tagsStr.split('||').filter(Boolean) : [];
+              const fallbackTags = ['Outstanding Service', 'Friendly Staff', 'Great Quality', 'Super Fast', 'Clean & Welcoming', 'Highly Recommended'];
+              const displayTags = rawTags.length > 0 ? rawTags : fallbackTags;
+
+              const container = document.getElementById('tagsContainer');
+              container.innerHTML = displayTags.map((tag) => {
+                return '<button type="button" onclick="toggleTag(this, \\'' + tag.replace(/'/g, "\\\\'") + '\\')" class="tag-btn px-2.5 py-1 text-xs rounded-xl border border-neutral-700 bg-neutral-950 text-neutral-300 hover:border-neutral-500 transition-colors">' + tag + '</button>';
+              }).join('');
+
+              document.getElementById('reviewsList').innerHTML = '';
+              document.getElementById('reviewsList').classList.add('hidden');
+              document.getElementById('reviewModal').classList.remove('hidden');
+            }
+
+            function closeReviewModal() {
+              document.getElementById('reviewModal').classList.add('hidden');
+            }
+
+            function toggleTag(btn, tag) {
+              const idx = selectedPraiseTags.indexOf(tag);
+              if (idx > -1) {
+                selectedPraiseTags.splice(idx, 1);
+                btn.className = 'tag-btn px-2.5 py-1 text-xs rounded-xl border border-neutral-700 bg-neutral-950 text-neutral-300 hover:border-neutral-500 transition-colors';
+              } else {
+                selectedPraiseTags.push(tag);
+                btn.className = 'tag-btn px-2.5 py-1 text-xs rounded-xl border border-amber-500 bg-amber-500/20 text-amber-300 font-semibold transition-colors';
+              }
+            }
+
+            async function generateReviews() {
+              const genBtn = document.getElementById('generateBtn');
+              const list = document.getElementById('reviewsList');
+              genBtn.disabled = true;
+              genBtn.innerText = 'Drafting Unique Reviews...';
+
+              try {
+                const res = await fetch('/api/ai/generate-review', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    businessName: currentBizName,
+                    businessCategory: currentBizCat,
+                    praiseTags: selectedPraiseTags,
+                  })
+                });
+                const data = await res.json();
+                const reviews = data.reviews || [];
+
+                if (reviews.length > 0) {
+                  list.innerHTML = reviews.map((r) => {
+                    const cleanText = r.text.replace(/"/g, '&quot;');
+                    return '<div class="p-3 bg-neutral-950 border border-neutral-800 rounded-2xl text-left space-y-2">' +
+                      '<div class="flex items-center justify-between text-[11px] font-bold text-amber-400 font-mono">' +
+                        '<span>' + (r.title || 'Review Option') + '</span>' +
+                        '<span>★★★★★</span>' +
+                      '</div>' +
+                      '<p class="text-xs text-neutral-300 leading-relaxed font-normal">' + r.text + '</p>' +
+                      '<button type="button" onclick="copyAndOpenGoogle(\\'' + cleanText.replace(/'/g, "\\\\'") + '\\')" class="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors shadow-xs active:scale-98">' +
+                        '<span>1-Tap Copy & Open Google</span>' +
+                      '</button>' +
+                    '</div>';
+                  }).join('');
+                  list.classList.remove('hidden');
+                }
+              } catch (e) {
+                console.error('Error generating reviews', e);
+              } finally {
+                genBtn.disabled = false;
+                genBtn.innerText = 'Generate Fresh Review Drafts';
+              }
+            }
+
+            function copyAndOpenGoogle(text) {
+              navigator.clipboard.writeText(text);
+              const toast = document.createElement('div');
+              toast.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500 text-neutral-950 font-bold rounded-xl text-xs shadow-lg z-50 animate-in fade-in';
+              toast.innerText = 'Copied to clipboard! Opening Google Reviews...';
+              document.body.appendChild(toast);
+              setTimeout(() => {
+                toast.remove();
+                window.open(currentGoogleUrl, '_blank');
+              }, 600);
+            }
+
+            function openWifiModal(ssid, pass) {
+              currentWifiPass = pass;
+              document.getElementById('wifiSsidDisplay').innerText = ssid;
+              document.getElementById('wifiPassDisplay').innerText = pass || '(No password required)';
+              document.getElementById('wifiModal').classList.remove('hidden');
+            }
+
+            function closeWifiModal() {
+              document.getElementById('wifiModal').classList.add('hidden');
+            }
+
+            function copyWifiPassword() {
+              if (currentWifiPass) {
+                navigator.clipboard.writeText(currentWifiPass);
+                const btn = document.getElementById('copyWifiBtn');
+                btn.innerText = 'Password Copied!';
+                btn.className = 'w-full py-2.5 px-4 text-xs font-bold text-neutral-950 bg-emerald-400 rounded-xl transition-all shadow-md';
+                setTimeout(() => {
+                  btn.innerText = 'Copy Password to Clipboard';
+                  btn.className = 'w-full py-2.5 px-4 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-500 rounded-xl transition-all shadow-md active:scale-98';
+                }, 2000);
+              }
+            }
+          </script>
         </body>
         </html>
       `);
@@ -1489,6 +1826,33 @@ async function startServer() {
     });
   });
 
+  // Verify batch password or admin password for unassigned QR codes
+  app.post('/api/batch-qr/verify-pass', (req: Request, res: Response) => {
+    const { slug, password } = req.body;
+    const db = loadDatabase();
+    const clean = (slug || '').trim().toLowerCase().replace(/^\/r\//, '').replace(/^\//, '');
+    const link = db.links.find((l) => l.slug.toLowerCase() === clean);
+
+    if (!link) {
+      return res.status(404).json({ error: 'QR Code not found.' });
+    }
+
+    const provided = (password || '').trim();
+    const isAuthorized = link.batchPassword
+      ? (provided === link.batchPassword || provided === 'P4prince.com')
+      : (provided === 'P4prince.com');
+
+    if (!isAuthorized) {
+      return res.status(401).json({
+        error: link.batchPassword
+          ? 'Incorrect batch password. Please enter the password configured for this QR batch.'
+          : 'Incorrect admin verification password. Please use P4prince.com'
+      });
+    }
+
+    return res.json({ success: true, message: 'Password verified successfully.' });
+  });
+
   // 2. Direct Mobile Activation (Used when scanning unassigned QR code with phone)
   app.post('/api/batch-qr/direct-activate', (req: Request, res: Response) => {
     let {
@@ -2102,141 +2466,124 @@ async function startServer() {
 
   // 1. AI 5-Star Google Review Generator (Powered by Gemini 3.8 Flash)
   app.post('/api/ai/generate-review', async (req: Request, res: Response) => {
-    const { businessName = 'Local Business', businessCategory = 'Local Business', praiseTags = [], customNotes = '', tone = 'friendly' } = req.body;
+    const {
+      businessName = 'Local Business',
+      businessCategory = 'Local Business',
+      praiseTags = [],
+      customNotes = '',
+      tone = 'friendly',
+      requestedCount,
+    } = req.body;
+
+    // Dynamically vary count between 3 and 5 if not explicitly requested
+    const targetCount = Math.min(
+      Math.max(parseInt(requestedCount, 10) || Math.floor(Math.random() * 3) + 3, 3),
+      5
+    );
 
     const tagsText = Array.isArray(praiseTags) && praiseTags.length > 0 ? praiseTags.join(', ') : 'great service, friendly staff';
     const catLower = (businessCategory || '').toLowerCase();
 
-    // Category-tailored realistic human fallback drafts (zero AI clichés)
-    let fallbackReviews = [
-      {
-        id: 1,
-        title: 'Quick & Genuine',
-        text: `Really great experience at ${businessName}. The staff was super helpful, welcoming, and everything went smoothly from start to finish (${tagsText}). Will definitely come back!`,
-      },
-      {
-        id: 2,
-        title: 'Detailed Highlights',
-        text: `Stopped by ${businessName} recently and was really pleased. Clean space, attentive team, and high quality work. You can tell they actually care about their customers. Highly recommended!`,
-      },
-      {
-        id: 3,
-        title: 'Personal Shoutout',
-        text: `Five stars for ${businessName}! The atmosphere is great and the team went out of their way to make sure I had everything I needed (${tagsText}). Glad to support a great local business.`,
-      },
-    ];
+    // Expansive pool of category-specific organic human drafts
+    const reviewPool: Array<{ title: string; text: string }> = [];
 
-    if (catLower.includes('food') || catLower.includes('restaurant') || catLower.includes('cafe') || catLower.includes('bakery') || catLower.includes('bar') || catLower.includes('pizza') || catLower.includes('diner') || catLower.includes('trattoria') || catLower.includes('bistro')) {
-      fallbackReviews = [
-        {
-          id: 1,
-          title: 'Fresh & Delicious',
-          text: `The food was delicious, came out hot and fresh, and our server was super attentive. Definitely coming back for more!`,
-        },
-        {
-          id: 2,
-          title: 'Great Dining Vibe',
-          text: `Such a lovely spot! Great flavors, generous portions, and the staff made us feel right at home (${tagsText}). Can't wait to bring friends next time.`,
-        },
-        {
-          id: 3,
-          title: 'Top Recommendation',
-          text: `Everything we ordered was 10/10. Quick service, clean dining room, and friendly staff. Best meal I've had in a while!`,
-        },
-      ];
-    } else if (catLower.includes('salon') || catLower.includes('barber') || catLower.includes('spa') || catLower.includes('hair') || catLower.includes('nail')) {
-      fallbackReviews = [
-        {
-          id: 1,
-          title: 'Loved the Results',
-          text: `Walked out feeling amazing! They took their time, listened carefully to what I wanted, and nailed it. Very skilled and friendly team.`,
-        },
-        {
-          id: 2,
-          title: 'Super Clean & Welcoming',
-          text: `My new regular spot! Beautiful, clean salon with a relaxing atmosphere. The staff is warm and so detail-oriented (${tagsText}).`,
-        },
-        {
-          id: 3,
-          title: 'Consistent & Professional',
-          text: `Always consistent and top tier service. Great attention to detail and no rushing through the appointment. 5 stars all the way!`,
-        },
-      ];
-    } else if (catLower.includes('dental') || catLower.includes('clinic') || catLower.includes('health') || catLower.includes('doctor') || catLower.includes('med')) {
-      fallbackReviews = [
-        {
-          id: 1,
-          title: 'Gentle & Clear',
-          text: `The team at ${businessName} puts you completely at ease. Very gentle, explained every step clearly, and zero wait time.`,
-        },
-        {
-          id: 2,
-          title: 'Thorough & Kind',
-          text: `Extremely clean and modern facility. The staff was kind and patient, and the doctor answered all my questions without rushing (${tagsText}).`,
-        },
-        {
-          id: 3,
-          title: 'Highly Recommended',
-          text: `Best experience I've had at a clinic. Professional front desk, comfortable environment, and very caring staff. Thank you!`,
-        },
-      ];
-    } else if (catLower.includes('auto') || catLower.includes('repair') || catLower.includes('car') || catLower.includes('mechanic') || catLower.includes('detail')) {
-      fallbackReviews = [
-        {
-          id: 1,
-          title: 'Honest & Prompt',
-          text: `Honest, reliable, and fair pricing. Diagnosed the issue quickly and had my car ready right when promised. Great shop!`,
-        },
-        {
-          id: 2,
-          title: 'Quality Workmanship',
-          text: `Top notch service at ${businessName}. Transparent pricing, explained everything clearly, and great quality workmanship (${tagsText}).`,
-        },
-        {
-          id: 3,
-          title: 'Trustworthy Service',
-          text: `Hard to find automotive shops you can truly trust, but these guys are the real deal. Friendly, fast turnaround, and zero surprises.`,
-        },
-      ];
+    if (catLower.includes('food') || catLower.includes('restaurant') || catLower.includes('cafe') || catLower.includes('bakery') || catLower.includes('bar') || catLower.includes('pizza') || catLower.includes('diner') || catLower.includes('trattoria') || catLower.includes('bistro') || catLower.includes('burger')) {
+      reviewPool.push(
+        { title: 'Fresh & Flavorful', text: `Food was hot, fresh, and full of flavor. Our server was attentive without being pushy (${tagsText}). 10/10 dining experience!` },
+        { title: 'New Favorite Spot', text: `Such a welcoming atmosphere at ${businessName}. Portions were great, the food came out quickly, and the staff was so kind. Can't wait to come back.` },
+        { title: 'Super Fast & Tasty', text: `Stopped in for a quick bite and was blown away. Fast service, spotless dining area, and genuinely delicious food. Highly recommend!` },
+        { title: 'Friendly Hospitality', text: `From the moment we walked in, the team made us feel right at home. Great food recommendations and generous portions (${tagsText}).` },
+        { title: 'Consistent Quality', text: `We visit ${businessName} regularly and they never disappoint. The quality is always top-notch and the staff always has a smile on their face.` },
+        { title: 'Great Vibe & Value', text: `Amazing value for such great quality food. The vibe is relaxed and comfortable, and the specials are always worth ordering.` }
+      );
+    } else if (catLower.includes('salon') || catLower.includes('barber') || catLower.includes('spa') || catLower.includes('hair') || catLower.includes('nail') || catLower.includes('beauty')) {
+      reviewPool.push(
+        { title: 'Loved the Results', text: `Walked out feeling incredible! They took their time to understand exactly what I wanted and executed it flawlessly (${tagsText}).` },
+        { title: 'Clean & Relaxing', text: `Super clean salon with such a calming aesthetic. The staff is warm, professional, and genuinely skilled at what they do.` },
+        { title: 'Great Attention to Detail', text: `Best haircut and styling I've had in a long time. Zero rushing and incredible attention to detail. 5 stars all around!` },
+        { title: 'Always on Time', text: `Appreciated that my appointment started right on time. Welcoming reception, very clean tools, and top-tier results.` },
+        { title: 'Highly Skilled Team', text: `The team at ${businessName} knows what they are doing. Very talented, friendly conversation, and fantastic results.` }
+      );
+    } else if (catLower.includes('dental') || catLower.includes('clinic') || catLower.includes('health') || catLower.includes('doctor') || catLower.includes('med') || catLower.includes('therapy')) {
+      reviewPool.push(
+        { title: 'Gentle & Patient', text: `The team at ${businessName} put all my anxiety at ease. Very gentle, explained each step thoroughly, and virtually painless.` },
+        { title: 'Punctual & Thorough', text: `Extremely clean and modern facility. Zero waiting room delay, and the doctor took time to listen and answer all my questions (${tagsText}).` },
+        { title: 'Compassionate Care', text: `Best experience I've had at a clinic. Warm front desk staff, comfortable environment, and very caring practitioners.` },
+        { title: 'Very Professional', text: `Everything was handled smoothly from check-in to checkout. Transparent explanations and excellent follow-up care.` }
+      );
+    } else if (catLower.includes('auto') || catLower.includes('repair') || catLower.includes('car') || catLower.includes('mechanic') || catLower.includes('detail') || catLower.includes('tire')) {
+      reviewPool.push(
+        { title: 'Honest & Reliable', text: `Honest diagnostics and fair pricing with zero surprise add-ons. They fixed the issue quickly and had my vehicle ready right on time.` },
+        { title: 'Quality Workmanship', text: `Top-notch service at ${businessName}. Transparent communication, explained what needed immediate attention vs what could wait (${tagsText}).` },
+        { title: 'Trustworthy Mechanics', text: `Hard to find automotive shops you can truly trust, but this team is the real deal. Prompt, polite, and great craftsmanship.` },
+        { title: 'Fast Turnaround', text: `Dropped it off in the morning and it was done earlier than estimated. Car runs perfectly now. Will definitely return!` }
+      );
+    } else {
+      reviewPool.push(
+        { title: 'Outstanding Service', text: `Really impressed with ${businessName}. The team was super helpful, welcoming, and everything went smoothly from start to finish (${tagsText}).` },
+        { title: 'High Quality & Professional', text: `Professional, prompt, and attentive. You can tell they take genuine pride in taking care of their customers. Highly recommended!` },
+        { title: 'Great Experience', text: `Five stars for ${businessName}! The atmosphere is great and the staff went out of their way to make sure I had everything I needed.` },
+        { title: 'Smooth & Easy', text: `From initial contact to completion, the entire process was seamless. Friendly people, fair pricing, and great communication.` },
+        { title: 'Will Be Back', text: `Great experience all around. Good value, wonderful service, and very trustworthy. Glad to support a standout local business!` }
+      );
     }
+
+    // Shuffle pool with Fisher-Yates to guarantee distinct non-repeating fallbacks
+    const shuffled = [...reviewPool];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    const fallbackReviews = shuffled.slice(0, targetCount).map((item, idx) => ({
+      id: idx + 1,
+      title: item.title,
+      text: item.text,
+    }));
 
     if (!process.env.GEMINI_API_KEY || !ai) {
       return res.json({ reviews: fallbackReviews });
     }
 
     try {
-      const prompt = `You are a real, genuine customer writing an authentic, human 5-star Google review for "${businessName}", which is a "${businessCategory}".
-Customer selected highlights: ${tagsText}.
-Specific personal note from customer: ${customNotes || 'none'}.
-Tone: ${tone}.
+      const prompt = `You are an authentic, everyday human customer writing a real 5-star Google review on a smartphone for "${businessName}", which is a "${businessCategory}".
+Selected highlights from this visit: ${tagsText}.
+Optional customer note: ${customNotes || 'none'}.
+Desired tone: ${tone}.
+Randomizer context: ${Date.now()}-${Math.random().toString(36).substring(2, 7)}.
 
-STRICT INSTRUCTIONS FOR REAL, ORGANIC REVIEWS:
-1. Write like an actual human typing a review on their smartphone after a good experience.
-2. NEVER use AI buzzwords or marketing fluff like "testament to excellence", "delve", "orchestrated", "par excellence", "game-changer", "plethora", "beacon of quality", "nestled".
-3. Use category-authentic details for a "${businessCategory}" (e.g. food taste, wait time, haircut technique, bedside manner, fair pricing, clean workspace).
-4. Keep the wording relaxed, realistic, positive, and conversational.
-
-Generate exactly 3 varied review options:
-Option 1: Short & punchy (2-3 sentences, direct and genuine)
-Option 2: Detailed and descriptive (3-4 sentences, specific highlights)
-Option 3: Warm personal shoutout to the staff, atmosphere, and service (2-3 sentences)
+CRITICAL INSTRUCTIONS FOR 100% ORGANIC & VARIED REVIEWS:
+1. Generate EXACTLY ${targetCount} DISTINCT reviews (count: ${targetCount}).
+2. Every single review must sound like it was written by a completely different individual with their own voice and vocabulary.
+3. NEVER repeat sentence structures, openings, or phrases between options.
+4. ABSOLUTELY FORBIDDEN: Promotional AI buzzwords such as "testament to excellence", "delve", "orchestrated", "par excellence", "game-changer", "plethora", "beacon of quality", "nestled", "tapestry", "seamlessly blends", "culinary journey".
+5. Ground each review in believable details authentic to a "${businessCategory}" (e.g. food taste, wait time, haircut technique, bedside manner, fair pricing, clean workspace).
+6. Provide distinct perspectives:
+   - Option 1: Short & punchy (2 sentences)
+   - Option 2: Detailed highlight of specific experience (${tagsText}) (3-4 sentences)
+   - Option 3: Warm personal shoutout to the staff & atmosphere (2-3 sentences)
+   ${targetCount >= 4 ? '- Option 4: Repeat customer or strong recommendation to friends (2-3 sentences)' : ''}
+   ${targetCount >= 5 ? '- Option 5: Honest praise on value, speed, or quality (2-3 sentences)' : ''}
 
 Respond ONLY with valid JSON in this exact structure:
 {
   "reviews": [
-    { "id": 1, "title": "Quick & Authentic", "text": "..." },
-    { "id": 2, "title": "Detailed Highlights", "text": "..." },
-    { "id": 3, "title": "Staff & Atmosphere", "text": "..." }
+    { "id": 1, "title": "Short Label", "text": "..." }
   ]
 }`;
 
-      const aiResponse = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-        },
-      });
+      const aiResponse = await Promise.race([
+        ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            temperature: 1.05,
+          },
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('AI generation timed out')), 5000)
+        ),
+      ]);
 
       const responseText = aiResponse.text?.trim() || '';
       try {
@@ -2245,7 +2592,7 @@ Respond ONLY with valid JSON in this exact structure:
           return res.json(parsed);
         }
       } catch (err) {
-        console.warn('Failed to parse Gemini JSON output, using fallback:', err);
+        console.warn('Failed to parse Gemini JSON output, using randomized fallback:', err);
       }
 
       return res.json({ reviews: fallbackReviews });

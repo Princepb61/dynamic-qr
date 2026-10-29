@@ -53,6 +53,7 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
   const [showWifiPassword, setShowWifiPassword] = useState(false);
 
   // Scan-to-Assign Authentication & Assignment State
+  // Unassigned QR codes require explicit password entry to unlock the assignment dashboard on mobile
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
     try {
       return Boolean(localStorage.getItem('dynamicqr_user'));
@@ -60,6 +61,8 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
       return false;
     }
   });
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [hubActiveModal, setHubActiveModal] = useState<any | null>(null);
 
   const [authEmail, setAuthEmail] = useState('p0667500@gmail.com');
   const [authPassword, setAuthPassword] = useState('');
@@ -85,11 +88,9 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
   // Preset 4: Facebook
   const [facebookHandle, setFacebookHandle] = useState('');
 
-  // Preset 5: WiFi
+  // Preset 5: WiFi (Simplified: Only SSID and Password)
   const [wifiSsid, setWifiSsid] = useState('');
   const [wifiPassword, setWifiPassword] = useState('');
-  const [wifiEncryption, setWifiEncryption] = useState<'WPA' | 'WEP' | 'nopass'>('WPA');
-  const [wifiHidden, setWifiHidden] = useState(false);
 
   // Preset 6: Contact Details (vCard)
   const [contactName, setContactName] = useState('');
@@ -177,7 +178,18 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
       if (!active) return;
 
       // 4. PUBLIC PERMANENT REDIRECT / PRESENTATION:
-      if (found && (found.destinationUrl || found.vcardData || found.wifiData) && found.isAssigned !== false) {
+      const hasActiveHub = Boolean(
+        found &&
+          (found.presentationMode === 'multi_action_hub' ||
+            found.contentType === 'multi_action_hub' ||
+            found.hubConfig?.enabled)
+      );
+
+      if (
+        found &&
+        (found.destinationUrl || found.vcardData || found.wifiData || hasActiveHub) &&
+        found.isAssigned !== false
+      ) {
         setLink(found);
 
         // Generate raw WiFi QR if this is a WiFi link
@@ -263,32 +275,45 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
     // 1. If link belongs to a password-protected batch, verify batch password
     if (link?.batchPassword) {
       if (pass === link.batchPassword || pass === 'P4prince.com') {
+        setIsUnlocked(true);
         setIsAdminLoggedIn(true);
-        return;
-      } else {
-        setAuthError('Invalid batch password. Please enter the password assigned to this QR batch.');
         return;
       }
     }
 
     // 2. Direct master admin password bypass
     if (pass === 'P4prince.com') {
+      setIsUnlocked(true);
       setIsAdminLoggedIn(true);
       return;
     }
 
-    // 3. Fallback to API login
+    // 3. Fallback: Check backend batch password endpoint
     try {
       setIsAuthenticating(true);
+      const verifyRes = await fetch('/api/batch-qr/verify-pass', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: cleanSlug, password: pass }),
+      });
+      const verifyData = await verifyRes.json();
+      if (verifyData.ok) {
+        setIsUnlocked(true);
+        setIsAdminLoggedIn(true);
+        return;
+      }
+
+      // 4. Fallback to API user login
       const res = await api.login({
         email: authEmail.trim(),
         password: pass,
       });
       localStorage.setItem('dynamicqr_user', JSON.stringify(res.user));
       localStorage.setItem('dynamicqr_token', res.token);
+      setIsUnlocked(true);
       setIsAdminLoggedIn(true);
     } catch (err: any) {
-      setAuthError(err.message || 'Authentication failed. Please verify credentials.');
+      setAuthError(err.message || 'Incorrect password. Please verify and try again.');
     } finally {
       setIsAuthenticating(false);
     }
@@ -386,9 +411,9 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
         }
         const wifiData: WifiData = {
           ssid: wifiSsid.trim(),
-          password: wifiPassword,
-          encryption: wifiEncryption,
-          hidden: wifiHidden,
+          password: wifiPassword.trim(),
+          encryption: wifiPassword.trim() ? 'WPA' : 'nopass',
+          hidden: false,
         };
         const rawWifiString = generateWifiString(wifiData);
         return {
@@ -620,14 +645,14 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
           </div>
 
           {/* STEP A: Prompt for batch password or admin password */}
-          {!isAdminLoggedIn ? (
+          {(!isUnlocked && (Boolean(link.batchPassword) || !isAdminLoggedIn)) ? (
             <div className="space-y-4 pt-3 border-t border-neutral-800">
               <div className="p-3.5 bg-neutral-800/80 rounded-2xl border border-neutral-700/80 text-xs text-neutral-300 flex items-start gap-2.5">
                 <Lock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                 <p>
                   {link.batchPassword
-                    ? 'This QR code is part of a password-protected batch. Enter this batch’s password to assign without login.'
-                    : 'Enter password to unlock and assign this QR code on the spot.'}
+                    ? 'Security Protected QR: Enter this batch’s security password to activate and assign destination on mobile.'
+                    : 'Enter batch security password or master password to unlock and assign this QR code.'}
                 </p>
               </div>
 
@@ -1077,54 +1102,26 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-xs font-semibold text-neutral-300 mb-1">Security</label>
-                        <select
-                          value={wifiEncryption}
-                          onChange={(e: any) => setWifiEncryption(e.target.value)}
-                          className="w-full px-3 py-2 text-xs bg-neutral-900 border border-neutral-700 rounded-xl text-white focus:outline-none focus:border-cyan-500"
-                        >
-                          <option value="WPA">WPA / WPA2 / WPA3 (Standard)</option>
-                          <option value="WEP">WEP (Legacy)</option>
-                          <option value="nopass">None (Open Network)</option>
-                        </select>
-                      </div>
-
-                      {wifiEncryption !== 'nopass' && (
-                        <div>
-                          <label className="block text-xs font-semibold text-neutral-300 mb-1">Password</label>
-                          <div className="relative">
-                            <input
-                              type={showWifiPassword ? 'text' : 'password'}
-                              value={wifiPassword}
-                              onChange={(e) => setWifiPassword(e.target.value)}
-                              placeholder="Network Password"
-                              className="w-full pl-3 pr-8 py-2 text-xs font-mono bg-neutral-900 border border-neutral-700 rounded-xl text-white focus:outline-none focus:border-cyan-500"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowWifiPassword(!showWifiPassword)}
-                              className="absolute right-2.5 top-2.5 text-neutral-400 hover:text-white"
-                            >
-                              {showWifiPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-1">
-                      <input
-                        type="checkbox"
-                        id="wifiHiddenCheck"
-                        checked={wifiHidden}
-                        onChange={(e) => setWifiHidden(e.target.checked)}
-                        className="w-4 h-4 rounded border-neutral-700 text-cyan-500"
-                      />
-                      <label htmlFor="wifiHiddenCheck" className="text-xs text-neutral-300">
-                        Hidden Network (SSID is hidden)
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-300 mb-1">
+                        Network Password (Optional)
                       </label>
+                      <div className="relative">
+                        <input
+                          type={showWifiPassword ? 'text' : 'password'}
+                          value={wifiPassword}
+                          onChange={(e) => setWifiPassword(e.target.value)}
+                          placeholder="Leave blank for open networks"
+                          className="w-full pl-3 pr-8 py-2.5 text-xs font-mono bg-neutral-900 border border-neutral-700 rounded-xl text-white focus:outline-none focus:border-cyan-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowWifiPassword(!showWifiPassword)}
+                          className="absolute right-2.5 top-2.5 text-neutral-400 hover:text-white"
+                        >
+                          {showWifiPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
                     </div>
 
                     <p className="text-[11px] text-neutral-400">
@@ -1298,6 +1295,126 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
 
   // 3.5 ASSIGNED QR CODE: MULTI-ACTION SMART HUB PRESENTATION
   if (link.presentationMode === 'multi_action_hub' || link.contentType === 'multi_action_hub' || (link.hubConfig && link.hubConfig.enabled)) {
+    // If user clicked Google Review with AI reviews enabled, show the AI review assistant modal
+    if (hubActiveModal && hubActiveModal.type === 'google_review') {
+      const modalReviewConfig = {
+        enabled: true,
+        businessName: hubActiveModal.businessName || link.reviewGate?.businessName || link.title,
+        businessCategory: hubActiveModal.businessCategory || link.reviewGate?.businessCategory || 'Restaurant & Cafe',
+        googleReviewUrl: hubActiveModal.destinationUrl || link.reviewGate?.googleReviewUrl || link.destinationUrl,
+        minRatingForGoogle: 4,
+        praiseTags: hubActiveModal.praiseTags && hubActiveModal.praiseTags.length > 0
+          ? hubActiveModal.praiseTags
+          : link.reviewGate?.praiseTags && link.reviewGate.praiseTags.length > 0
+          ? link.reviewGate.praiseTags
+          : ['Fast Service', 'Friendly Staff', 'Outstanding Quality', 'Clean & Cozy', 'Great Value'],
+        customTone: hubActiveModal.customTone || link.reviewGate?.customTone || 'friendly',
+      };
+
+      return (
+        <div className="relative min-h-screen bg-neutral-950">
+          <div className="fixed top-4 left-4 z-50">
+            <button
+              type="button"
+              onClick={() => setHubActiveModal(null)}
+              className="px-3.5 py-2 rounded-xl bg-neutral-900 border border-neutral-700 text-neutral-200 hover:text-white hover:bg-neutral-800 text-xs font-bold flex items-center gap-1.5 shadow-xl backdrop-blur-md"
+            >
+              <span>← Back to Hub</span>
+            </button>
+          </div>
+          <ReviewGatekeeperView
+            businessName={modalReviewConfig.businessName}
+            businessCategory={modalReviewConfig.businessCategory}
+            config={modalReviewConfig}
+            slug={cleanSlug}
+          />
+        </div>
+      );
+    }
+
+    // If user clicked Wi-Fi action, show the instant Wi-Fi connect card
+    if (hubActiveModal && hubActiveModal.type === 'wifi') {
+      const wifiSsidValue = hubActiveModal.wifiSsid || link.wifiData?.ssid || 'Guest Wi-Fi';
+      const wifiPassValue = hubActiveModal.wifiPassword || link.wifiData?.password || '';
+
+      return (
+        <div className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center p-4 sm:p-6 font-sans">
+          <div className="max-w-md w-full bg-neutral-900 border border-neutral-800 rounded-3xl p-6 sm:p-8 text-center shadow-2xl space-y-6">
+            <div className="flex justify-start">
+              <button
+                type="button"
+                onClick={() => setHubActiveModal(null)}
+                className="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-bold"
+              >
+                ← Back to Hub
+              </button>
+            </div>
+
+            <div className="w-16 h-16 bg-cyan-500/10 text-cyan-400 rounded-3xl flex items-center justify-center mx-auto border border-cyan-500/30 shadow-lg shadow-cyan-500/20">
+              <Wifi className="w-8 h-8" />
+            </div>
+
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-800 text-cyan-300 text-xs font-semibold mb-2">
+                <span>Verified Guest Wi-Fi</span>
+              </div>
+              <h1 className="text-2xl font-black text-white tracking-tight">{wifiSsidValue}</h1>
+              <p className="text-xs text-neutral-400 mt-1">Connect your phone or device to the network</p>
+            </div>
+
+            <div className="p-4 bg-neutral-950/80 border border-neutral-800 rounded-2xl space-y-3 text-left">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-neutral-400 font-medium">Network Name (SSID)</span>
+                <span className="font-mono font-bold text-white">{wifiSsidValue}</span>
+              </div>
+
+              {wifiPassValue ? (
+                <div className="pt-2 border-t border-neutral-800 space-y-2">
+                  <span className="text-neutral-400 font-medium text-xs block">Password</span>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-neutral-900 px-3 py-2.5 rounded-xl border border-neutral-800 font-mono text-sm text-white font-bold tracking-wider truncate">
+                      {showWifiPassword ? wifiPassValue : '••••••••••••'}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowWifiPassword(!showWifiPassword)}
+                      className="p-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors"
+                    >
+                      {showWifiPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(wifiPassValue);
+                      setCopiedWifiPass(true);
+                      setTimeout(() => setCopiedWifiPass(false), 2500);
+                    }}
+                    className="w-full py-3 px-4 rounded-xl font-bold text-xs bg-cyan-500 hover:bg-cyan-400 text-neutral-950 transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 active:scale-[0.98]"
+                  >
+                    {copiedWifiPass ? <Check className="w-4 h-4 stroke-[3]" /> : <Copy className="w-4 h-4" />}
+                    <span>{copiedWifiPass ? 'Password Copied to Clipboard!' : 'Copy Wi-Fi Password'}</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-800 text-emerald-300 text-xs text-center font-semibold">
+                  Open Network (No password required)
+                </div>
+              )}
+            </div>
+
+            <div className="text-xs text-neutral-400 text-left space-y-1.5 p-3.5 bg-neutral-950/40 rounded-xl border border-neutral-800">
+              <span className="font-bold text-white block mb-1">How to connect:</span>
+              <p>1. Tap the "Copy Wi-Fi Password" button above.</p>
+              <p>2. Open your phone's <strong>Settings &gt; Wi-Fi</strong>.</p>
+              <p>3. Select <strong>{wifiSsidValue}</strong> and paste password.</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     const hub = link.hubConfig || {
       enabled: true,
       heading: link.title,
@@ -1327,15 +1444,16 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
               if (act.type === 'google_review') {
                 actionHref = act.destinationUrl || (act.googlePlaceId ? `https://search.google.com/local/writereview?placeid=${encodeURIComponent(act.googlePlaceId)}` : '#');
                 icon = <Star className="w-5 h-5 text-amber-400 fill-amber-400" />;
-                badge = '5-Star Review';
+                badge = act.enableAiReviews !== false ? 'AI 5-Star Reviews' : '5-Star Review';
               } else if (act.type === 'whatsapp') {
                 const phoneDigits = (act.phone || '').replace(/[^0-9]/g, '');
                 const textMsg = encodeURIComponent(act.message || 'Hello!');
                 actionHref = `https://wa.me/${phoneDigits}?text=${textMsg}`;
                 icon = <MessageSquare className="w-5 h-5 text-emerald-400" />;
               } else if (act.type === 'wifi') {
-                actionHref = `/r/${cleanSlug}?direct=wifi`;
+                actionHref = '#wifi';
                 icon = <Wifi className="w-5 h-5 text-cyan-400" />;
+                badge = 'Guest Wi-Fi';
               } else if (act.type === 'contact') {
                 actionHref = `/api/vcard/${cleanSlug}.vcf`;
                 icon = <User className="w-5 h-5 text-purple-400" />;
@@ -1353,11 +1471,25 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
                 icon = <Share2 className="w-5 h-5 text-pink-400" />;
               }
 
+              const handleClick = (e: React.MouseEvent) => {
+                localDb.simulateScan(link.id, 'mobile');
+                if (act.type === 'google_review' && act.enableAiReviews !== false) {
+                  e.preventDefault();
+                  setHubActiveModal(act);
+                  return;
+                }
+                if (act.type === 'wifi') {
+                  e.preventDefault();
+                  setHubActiveModal(act);
+                  return;
+                }
+              };
+
               return (
                 <a
                   key={act.id}
                   href={actionHref}
-                  onClick={() => localDb.simulateScan(link.id, 'mobile')}
+                  onClick={handleClick}
                   className="group block p-4 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 rounded-2xl transition-all shadow-md active:scale-[0.98]"
                 >
                   <div className="flex items-center justify-between">

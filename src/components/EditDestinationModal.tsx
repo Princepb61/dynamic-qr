@@ -5,7 +5,6 @@ import {
   QRSettings,
   HubActionItem,
   MultiActionHubConfig,
-  HubActionType,
 } from '../types';
 import {
   X,
@@ -24,11 +23,12 @@ import {
   Utensils,
   MapPin,
   Share2,
-  ArrowRight,
-  ExternalLink,
   Lock,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { QRStudioModal } from './QRStudioModal';
+import { getPraiseTagsForCategory } from '../utils/categoryTags';
 
 interface EditDestinationModalProps {
   link: LinkRecord | null;
@@ -44,6 +44,11 @@ const DEFAULT_HUB_ACTIONS: HubActionItem[] = [
     title: 'Write a 5-Star Google Review',
     subtitle: 'Share your experience with our team',
     destinationUrl: '',
+    enableAiReviews: true,
+    businessName: '',
+    businessCategory: 'Restaurant & Cafe',
+    praiseTags: ['Fast Service', 'Friendly Staff', 'Outstanding Quality', 'Clean & Cozy', 'Great Value'],
+    customTone: 'friendly',
     enabled: true,
   },
   {
@@ -67,7 +72,9 @@ const DEFAULT_HUB_ACTIONS: HubActionItem[] = [
     id: 'act_wifi',
     type: 'wifi',
     title: 'Connect to Free Guest Wi-Fi',
-    subtitle: 'One-tap network connection',
+    subtitle: 'Instant network access',
+    wifiSsid: '',
+    wifiPassword: '',
     enabled: false,
   },
   {
@@ -117,7 +124,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
   onClose,
   onSave,
 }) => {
-  const [activeTab, setActiveTab] = useState<'general' | 'hub' | 'reviews'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'hub'>('general');
   const [destinationUrl, setDestinationUrl] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -132,17 +139,9 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
   const [hubSubheading, setHubSubheading] = useState('');
   const [hubActions, setHubActions] = useState<HubActionItem[]>(DEFAULT_HUB_ACTIONS);
 
-  // Review & Feedback state
-  const [reviewGateEnabled, setReviewGateEnabled] = useState(false);
-  const [businessName, setBusinessName] = useState('');
-  const [businessCategory, setBusinessCategory] = useState('');
-  const [googleReviewUrl, setGoogleReviewUrl] = useState('');
-  const [minRating, setMinRating] = useState(4);
-  const [praiseTags, setPraiseTags] = useState<string[]>([]);
+  // Quick tag input state for the Google Review action inside Hub
   const [newTagInput, setNewTagInput] = useState('');
-  const [reviewTone, setReviewTone] = useState<
-    'enthusiastic' | 'friendly' | 'professional' | 'short_and_sweet'
-  >('friendly');
+  const [showWifiPass, setShowWifiPass] = useState(false);
 
   // QR Studio Modal state
   const [isQRStudioOpen, setIsQRStudioOpen] = useState(false);
@@ -170,26 +169,66 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
         setHubEnabled(link.hubConfig.enabled !== false);
         setHubHeading(link.hubConfig.heading || link.title || '');
         setHubSubheading(link.hubConfig.subheading || 'Choose an option below');
-        setHubActions(link.hubConfig.actions);
+
+        // Merge with existing reviewGate configs if review action exists
+        const mergedActions = link.hubConfig.actions.map((act) => {
+          if (act.type === 'google_review') {
+            return {
+              ...act,
+              enableAiReviews: act.enableAiReviews !== false,
+              businessName: act.businessName || link.reviewGate?.businessName || link.title || '',
+              businessCategory: act.businessCategory || link.reviewGate?.businessCategory || 'Restaurant & Cafe',
+              destinationUrl: act.destinationUrl || link.reviewGate?.googleReviewUrl || link.destinationUrl || '',
+              praiseTags:
+                act.praiseTags && act.praiseTags.length > 0
+                  ? act.praiseTags
+                  : link.reviewGate?.praiseTags && link.reviewGate.praiseTags.length > 0
+                  ? link.reviewGate.praiseTags
+                  : getPraiseTagsForCategory(act.businessCategory || link.reviewGate?.businessCategory || 'Restaurant & Cafe'),
+              customTone: act.customTone || link.reviewGate?.customTone || 'friendly',
+            };
+          }
+          if (act.type === 'wifi') {
+            return {
+              ...act,
+              wifiSsid: act.wifiSsid || link.wifiData?.ssid || '',
+              wifiPassword: act.wifiPassword || link.wifiData?.password || '',
+            };
+          }
+          return act;
+        });
+
+        setHubActions(mergedActions);
       } else {
         setHubEnabled(link.presentationMode === 'multi_action_hub');
         setHubHeading(link.title || '');
         setHubSubheading('Tap any option below to get started');
-        setHubActions(DEFAULT_HUB_ACTIONS);
+        setHubActions(
+          DEFAULT_HUB_ACTIONS.map((act) => {
+            if (act.type === 'google_review') {
+              return {
+                ...act,
+                destinationUrl: link.reviewGate?.googleReviewUrl || link.destinationUrl || '',
+                businessName: link.reviewGate?.businessName || link.title || '',
+                businessCategory: link.reviewGate?.businessCategory || 'Restaurant & Cafe',
+                praiseTags:
+                  link.reviewGate?.praiseTags && link.reviewGate.praiseTags.length > 0
+                    ? link.reviewGate.praiseTags
+                    : getPraiseTagsForCategory(link.reviewGate?.businessCategory || 'Restaurant & Cafe'),
+                customTone: link.reviewGate?.customTone || 'friendly',
+              };
+            }
+            if (act.type === 'wifi') {
+              return {
+                ...act,
+                wifiSsid: link.wifiData?.ssid || '',
+                wifiPassword: link.wifiData?.password || '',
+              };
+            }
+            return act;
+          })
+        );
       }
-
-      // Review Gatekeeper
-      setReviewGateEnabled(link.reviewGate?.enabled || false);
-      setBusinessName(link.reviewGate?.businessName || link.title || '');
-      setBusinessCategory(link.reviewGate?.businessCategory || 'Local Business');
-      setGoogleReviewUrl(link.reviewGate?.googleReviewUrl || link.destinationUrl || '');
-      setMinRating(link.reviewGate?.minRatingForGoogle || 4);
-      setPraiseTags(
-        link.reviewGate?.praiseTags && link.reviewGate.praiseTags.length > 0
-          ? link.reviewGate.praiseTags
-          : ['Fast Service', 'Friendly Staff', 'Outstanding Quality', 'Clean & Cozy', 'Great Value']
-      );
-      setReviewTone(link.reviewGate?.customTone || 'friendly');
 
       setError(null);
     }
@@ -197,27 +236,50 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
 
   if (!isOpen || !link) return null;
 
-  const handleAddTag = () => {
-    const trimmed = newTagInput.trim();
-    if (trimmed && !praiseTags.includes(trimmed)) {
-      setPraiseTags([...praiseTags, trimmed]);
-      setNewTagInput('');
-    }
-  };
-
-  const handleRemoveTag = (tagToRemove: string) => {
-    setPraiseTags(praiseTags.filter((t) => t !== tagToRemove));
-  };
-
   const handleToggleHubAction = (actionId: string) => {
     setHubActions((prev) =>
-      prev.map((a) => (a.id === actionId ? { ...a, enabled: a.enabled === false ? true : false } : a))
+      prev.map((a) => (a.id === actionId ? { ...a, enabled: a.enabled === false } : a))
     );
   };
 
   const handleUpdateHubAction = (actionId: string, updates: Partial<HubActionItem>) => {
     setHubActions((prev) =>
-      prev.map((a) => (a.id === actionId ? { ...a, ...updates } : a))
+      prev.map((a) => {
+        if (a.id !== actionId) return a;
+        const updated = { ...a, ...updates };
+
+        // When businessCategory changes for google_review, refresh default tags
+        if (updates.businessCategory && updates.businessCategory !== a.businessCategory) {
+          const suggested = getPraiseTagsForCategory(updates.businessCategory);
+          updated.praiseTags = suggested;
+        }
+
+        return updated;
+      })
+    );
+  };
+
+  const handleAddReviewPraiseTag = (actionId: string, tag: string) => {
+    const trimmed = tag.trim();
+    if (!trimmed) return;
+    setHubActions((prev) =>
+      prev.map((a) => {
+        if (a.id !== actionId) return a;
+        const existing = a.praiseTags || [];
+        if (existing.includes(trimmed)) return a;
+        return { ...a, praiseTags: [...existing, trimmed] };
+      })
+    );
+    setNewTagInput('');
+  };
+
+  const handleRemoveReviewPraiseTag = (actionId: string, tagToRemove: string) => {
+    setHubActions((prev) =>
+      prev.map((a) => {
+        if (a.id !== actionId) return a;
+        const existing = a.praiseTags || [];
+        return { ...a, praiseTags: existing.filter((t) => t !== tagToRemove) };
+      })
     );
   };
 
@@ -226,8 +288,14 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
     setError(null);
 
     let target = destinationUrl.trim();
-    if (target && !target.startsWith('http://') && !target.startsWith('https://')) {
+    if (target && !target.startsWith('http://') && !target.startsWith('https://') && !target.startsWith('/r/')) {
       target = 'https://' + target;
+    }
+
+    const isHubActive = hubEnabled || presentationMode === 'multi_action_hub';
+
+    if (isHubActive && !target) {
+      target = `/r/${link.slug}`;
     }
 
     if (!target && presentationMode === 'instant_redirect') {
@@ -235,22 +303,30 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
       return;
     }
 
+    // Extract google_review action config to keep reviewGate synchronized
+    const reviewAct = hubActions.find((a) => a.type === 'google_review');
+    const wifiAct = hubActions.find((a) => a.type === 'wifi');
+
     const reviewGateConfig: ReviewGateConfig = {
-      enabled: reviewGateEnabled || presentationMode === 'review_gate',
-      businessName: businessName.trim() || title,
-      businessCategory: businessCategory.trim() || 'Local Business',
-      googleReviewUrl: googleReviewUrl.trim() || target,
-      minRatingForGoogle: minRating,
-      praiseTags,
-      customTone: reviewTone,
+      enabled: reviewAct ? reviewAct.enabled !== false && reviewAct.enableAiReviews !== false : false,
+      businessName: (reviewAct?.businessName || title || link.title || '').trim(),
+      businessCategory: (reviewAct?.businessCategory || 'Local Business').trim(),
+      googleReviewUrl: (reviewAct?.destinationUrl || target || '').trim(),
+      minRatingForGoogle: 4,
+      praiseTags: reviewAct?.praiseTags && reviewAct.praiseTags.length > 0
+        ? reviewAct.praiseTags
+        : getPraiseTagsForCategory(reviewAct?.businessCategory || 'Local Business'),
+      customTone: (reviewAct?.customTone as any) || 'friendly',
     };
 
     const multiActionHubConfig: MultiActionHubConfig = {
-      enabled: hubEnabled || presentationMode === 'multi_action_hub',
-      heading: hubHeading.trim() || title,
+      enabled: isHubActive,
+      heading: hubHeading.trim() || title || link.title,
       subheading: hubSubheading.trim() || 'Choose an option below',
       actions: hubActions,
     };
+
+    const effectivePresentationMode = isHubActive ? 'multi_action_hub' : presentationMode;
 
     try {
       setIsSaving(true);
@@ -259,9 +335,15 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
         title: title.trim() || link.title,
         description: description.trim(),
         batchPassword: batchPassword.trim() || undefined,
-        presentationMode,
+        presentationMode: effectivePresentationMode,
+        isAssigned: true,
         reviewGate: reviewGateConfig,
         hubConfig: multiActionHubConfig,
+        wifiData: wifiAct && wifiAct.wifiSsid ? {
+          ssid: wifiAct.wifiSsid,
+          password: wifiAct.wifiPassword || '',
+          encryption: 'WPA',
+        } : link.wifiData,
       });
       onClose();
     } catch (err: any) {
@@ -291,7 +373,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-neutral-400 mt-0.5">
-                Printed physical QR codes never change. All behavior updates instantaneously.
+                Printed physical QR codes never change. All destination behaviors update instantaneously.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -313,12 +395,11 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
             </div>
           </div>
 
-          {/* Navigation Tabs */}
+          {/* Navigation Tabs: 2 Tabs only */}
           <div className="flex border-b border-neutral-800 bg-neutral-950/40 p-2 gap-1 shrink-0 overflow-x-auto no-scrollbar">
             {[
               { id: 'general', label: 'Destination & Mode', icon: Globe },
-              { id: 'hub', label: '🔗 Multi-Action Hub', icon: Layers },
-              { id: 'reviews', label: '⭐ Organic Google AI Reviews', icon: Sparkles },
+              { id: 'hub', label: '🔗 Multi-Action Hub (Reviews, Wi-Fi & More)', icon: Layers },
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -327,20 +408,20 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                  className={`flex-1 min-w-[140px] py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
                     isActive
                       ? 'bg-neutral-800 text-white shadow-sm border border-neutral-700'
                       : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40'
                   }`}
                 >
-                  <Icon className="w-3.5 h-3.5" />
+                  <Icon className="w-4 h-4 text-indigo-400" />
                   <span>{tab.label}</span>
                 </button>
               );
             })}
           </div>
 
-          {/* Content */}
+          {/* Content Form */}
           <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1">
             {error && (
               <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300">
@@ -367,7 +448,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                     type="text"
                     value={destinationUrl}
                     onChange={(e) => setDestinationUrl(e.target.value)}
-                    placeholder="https://example.com/menu"
+                    placeholder="https://example.com/menu or leave blank if using Multi-Action Hub"
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
                   />
                 </div>
@@ -379,7 +460,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                       type="text"
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
-                      placeholder="e.g. Dining Table #4 Menu"
+                      placeholder="e.g. Dining Table #4 Standee"
                       className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
                     />
                   </div>
@@ -412,22 +493,17 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
 
                 <div className="space-y-2 pt-2">
                   <label className="text-xs font-bold text-white block">Scan Presentation Mode</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {[
-                      {
-                        id: 'instant_redirect',
-                        title: '⚡ Instant 307',
-                        desc: 'Redirects browser immediately to primary URL',
-                      },
                       {
                         id: 'multi_action_hub',
                         title: '🔗 Multi-Action Hub',
-                        desc: 'Interactive hub with reviews, WhatsApp, menu & WiFi',
+                        desc: 'All-in-one hub with Google AI reviews, WhatsApp, Wi-Fi & Menu',
                       },
                       {
-                        id: 'review_gate',
-                        title: '⭐ Google Review Mode',
-                        desc: 'Organic category AI reviews & direct feedback',
+                        id: 'instant_redirect',
+                        title: '⚡ Instant 307 Redirect',
+                        desc: 'Redirects browser immediately to primary destination URL',
                       },
                     ].map((mode) => (
                       <button
@@ -435,8 +511,10 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                         type="button"
                         onClick={() => {
                           setPresentationMode(mode.id as any);
-                          if (mode.id === 'multi_action_hub') setHubEnabled(true);
-                          if (mode.id === 'review_gate') setReviewGateEnabled(true);
+                          if (mode.id === 'multi_action_hub') {
+                            setHubEnabled(true);
+                            setActiveTab('hub');
+                          }
                         }}
                         className={`p-3 rounded-2xl border text-left transition-all ${
                           presentationMode === mode.id
@@ -453,7 +531,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
               </div>
             )}
 
-            {/* TAB 2: MULTI-ACTION SMART HUB */}
+            {/* TAB 2: MULTI-ACTION SMART HUB (Includes Organic Google AI Reviews & Wi-Fi) */}
             {activeTab === 'hub' && (
               <div className="space-y-4">
                 <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 space-y-2">
@@ -476,7 +554,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                     </label>
                   </div>
                   <p className="text-xs text-neutral-300">
-                    A single QR code displays an all-in-one smart landing page with direct buttons for reviews, WhatsApp, digital menu, guest Wi-Fi, contact card, location, and social profiles.
+                    A single QR code serves an interactive smart landing page on mobile. Guests can generate organic AI reviews, connect to guest Wi-Fi, chat on WhatsApp, or view digital menus.
                   </p>
                 </div>
 
@@ -506,24 +584,25 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                 <div className="space-y-3 pt-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-white">Configured Action Buttons</span>
-                    <span className="text-[11px] text-neutral-500">Toggle on/off as needed</span>
+                    <span className="text-[11px] text-neutral-500">Enable and customize each button</span>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {hubActions.map((action) => {
                       const isEnabled = action.enabled !== false;
                       return (
                         <div
                           key={action.id}
-                          className={`p-3.5 rounded-2xl border transition-all space-y-2.5 ${
+                          className={`p-3.5 rounded-2xl border transition-all space-y-3 ${
                             isEnabled
                               ? 'bg-neutral-950 border-neutral-800'
                               : 'bg-neutral-950/40 border-neutral-800/40 opacity-60'
                           }`}
                         >
+                          {/* Card Header */}
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              {action.type === 'google_review' && <Star className="w-4 h-4 text-amber-400" />}
+                              {action.type === 'google_review' && <Star className="w-4 h-4 text-amber-400 fill-amber-400" />}
                               {action.type === 'whatsapp' && <MessageCircle className="w-4 h-4 text-emerald-400" />}
                               {action.type === 'menu' && <Utensils className="w-4 h-4 text-orange-400" />}
                               {action.type === 'wifi' && <Wifi className="w-4 h-4 text-cyan-400" />}
@@ -532,7 +611,15 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                               {action.type === 'instagram' && <Share2 className="w-4 h-4 text-pink-400" />}
                               {action.type === 'facebook' && <Share2 className="w-4 h-4 text-blue-400" />}
                               {action.type === 'website' && <Globe className="w-4 h-4 text-indigo-400" />}
-                              <span className="text-xs font-bold text-white">{action.title}</span>
+                              <div>
+                                <span className="text-xs font-bold text-white block">{action.title}</span>
+                                {action.type === 'google_review' && (
+                                  <span className="text-[10px] text-amber-400 font-medium">Includes Organic Google AI Reviews</span>
+                                )}
+                                {action.type === 'wifi' && (
+                                  <span className="text-[10px] text-cyan-400 font-medium">Guest Wi-Fi (SSID & Password)</span>
+                                )}
+                              </div>
                             </div>
                             <button
                               type="button"
@@ -548,66 +635,314 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                           </div>
 
                           {isEnabled && (
-                            <div className="space-y-2 pt-1 border-t border-neutral-800/60">
+                            <div className="space-y-3 pt-2 border-t border-neutral-800/80">
+                              {/* Title & Subtitle inputs */}
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <input
-                                  type="text"
-                                  value={action.title}
-                                  onChange={(e) => handleUpdateHubAction(action.id, { title: e.target.value })}
-                                  placeholder="Button title"
-                                  className="bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                                />
-                                <input
-                                  type="text"
-                                  value={action.subtitle || ''}
-                                  onChange={(e) => handleUpdateHubAction(action.id, { subtitle: e.target.value })}
-                                  placeholder="Sub-description"
-                                  className="bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                                />
+                                <div>
+                                  <label className="text-[10px] text-neutral-400 block mb-0.5">Button Title</label>
+                                  <input
+                                    type="text"
+                                    value={action.title}
+                                    onChange={(e) => handleUpdateHubAction(action.id, { title: e.target.value })}
+                                    placeholder="Button title"
+                                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-neutral-400 block mb-0.5">Subtitle / Subtext</label>
+                                  <input
+                                    type="text"
+                                    value={action.subtitle || ''}
+                                    onChange={(e) => handleUpdateHubAction(action.id, { subtitle: e.target.value })}
+                                    placeholder="Sub-description"
+                                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                  />
+                                </div>
                               </div>
 
-                              {action.type === 'whatsapp' ? (
+                              {/* 1. GOOGLE REVIEW ACTION: EMBEDDED AI REVIEWS & CATEGORY PRAISE TAGS */}
+                              {action.type === 'google_review' && (
+                                <div className="p-3 bg-amber-950/20 border border-amber-500/30 rounded-xl space-y-3">
+                                  {/* AI Review Toggle */}
+                                  <div className="flex items-center justify-between pb-2 border-b border-amber-500/20">
+                                    <div className="flex items-center gap-2">
+                                      <Sparkles className="w-4 h-4 text-amber-400" />
+                                      <div>
+                                        <span className="text-xs font-bold text-white block">
+                                          Organic Google AI Review Generator
+                                        </span>
+                                        <span className="text-[10px] text-neutral-400 block">
+                                          Guests pick category praise tags; AI creates 3-5 unique review drafts
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={action.enableAiReviews !== false}
+                                        onChange={(e) =>
+                                          handleUpdateHubAction(action.id, { enableAiReviews: e.target.checked })
+                                        }
+                                        className="sr-only peer"
+                                      />
+                                      <div className="w-9 h-5 bg-neutral-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                                    </label>
+                                  </div>
+
+                                  {/* Direct Google Review URL */}
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] text-neutral-300 font-semibold block">
+                                      Google Review Direct Link <span className="text-amber-400">*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={action.destinationUrl || ''}
+                                      onChange={(e) =>
+                                        handleUpdateHubAction(action.id, { destinationUrl: e.target.value })
+                                      }
+                                      placeholder="https://g.page/r/your-google-place-id/review"
+                                      className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                                    />
+                                    <span className="text-[10px] text-neutral-500">
+                                      Where guests submit their final review on Google.
+                                    </span>
+                                  </div>
+
+                                  {/* AI Review Configuration when toggle is ON */}
+                                  {action.enableAiReviews !== false && (
+                                    <div className="space-y-2.5 pt-1">
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <div className="space-y-1">
+                                          <label className="text-[10px] text-neutral-300 font-semibold block">
+                                            Business Name
+                                          </label>
+                                          <input
+                                            type="text"
+                                            value={action.businessName || ''}
+                                            onChange={(e) =>
+                                              handleUpdateHubAction(action.id, { businessName: e.target.value })
+                                            }
+                                            placeholder="e.g. Copper Kettle Cafe"
+                                            className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <label className="text-[10px] text-neutral-300 font-semibold block">
+                                            Business Category <span className="text-amber-400">*</span>
+                                          </label>
+                                          <input
+                                            type="text"
+                                            value={action.businessCategory || ''}
+                                            onChange={(e) =>
+                                              handleUpdateHubAction(action.id, { businessCategory: e.target.value })
+                                            }
+                                            placeholder="e.g. Italian Restaurant, Hair Salon, Dental..."
+                                            className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                          />
+                                        </div>
+                                      </div>
+
+                                      {/* Category Praise Tags */}
+                                      <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                          <label className="text-[10px] text-neutral-300 font-semibold block">
+                                            Category Praise Tags ({action.businessCategory || 'Selected Category'})
+                                          </label>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const tags = getPraiseTagsForCategory(action.businessCategory || 'Restaurant');
+                                              handleUpdateHubAction(action.id, { praiseTags: tags });
+                                            }}
+                                            className="text-[10px] text-amber-400 hover:underline"
+                                          >
+                                            Reset to Category Defaults
+                                          </button>
+                                        </div>
+
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {(action.praiseTags || []).map((tag) => (
+                                            <span
+                                              key={tag}
+                                              className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg bg-neutral-800 text-neutral-200 border border-neutral-700"
+                                            >
+                                              <span>{tag}</span>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleRemoveReviewPraiseTag(action.id, tag)}
+                                                className="text-neutral-400 hover:text-rose-400 font-bold ml-0.5"
+                                              >
+                                                ×
+                                              </button>
+                                            </span>
+                                          ))}
+                                        </div>
+
+                                        <div className="flex gap-2 pt-1">
+                                          <input
+                                            type="text"
+                                            value={newTagInput}
+                                            onChange={(e) => setNewTagInput(e.target.value)}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                handleAddReviewPraiseTag(action.id, newTagInput);
+                                              }
+                                            }}
+                                            placeholder="Add custom praise tag (e.g. Homemade Pasta)..."
+                                            className="flex-1 bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1 text-xs text-white"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => handleAddReviewPraiseTag(action.id, newTagInput)}
+                                            className="px-3 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold"
+                                          >
+                                            Add
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {/* Tone */}
+                                      <div className="space-y-1">
+                                        <label className="text-[10px] text-neutral-300 font-semibold block">
+                                          AI Writing Tone
+                                        </label>
+                                        <select
+                                          value={action.customTone || 'friendly'}
+                                          onChange={(e) =>
+                                            handleUpdateHubAction(action.id, { customTone: e.target.value as any })
+                                          }
+                                          className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                        >
+                                          <option value="friendly">Warm & Friendly (Everyday human tone)</option>
+                                          <option value="enthusiastic">Enthusiastic & Delighted (Great for restaurants & experiences)</option>
+                                          <option value="short_and_sweet">Short, Punchy & Direct (2-3 sentences)</option>
+                                          <option value="professional">Detailed & Professional (Great for clinics & services)</option>
+                                        </select>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* 2. WI-FI ACTION: ONLY NETWORK NAME AND PASSWORD */}
+                              {action.type === 'wifi' && (
+                                <div className="p-3 bg-cyan-950/20 border border-cyan-500/30 rounded-xl space-y-2.5">
+                                  <div className="flex items-center gap-2 text-cyan-400 text-xs font-bold">
+                                    <Wifi className="w-4 h-4" />
+                                    <span>Guest Wi-Fi Credentials</span>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <div className="space-y-1">
+                                      <label className="text-[10px] text-neutral-300 font-semibold block">
+                                        Network Name (SSID) <span className="text-cyan-400">*</span>
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={action.wifiSsid || ''}
+                                        onChange={(e) =>
+                                          handleUpdateHubAction(action.id, { wifiSsid: e.target.value })
+                                        }
+                                        placeholder="e.g. CopperKettle_Guest"
+                                        className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                                      />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <label className="text-[10px] text-neutral-300 font-semibold block">
+                                        Password
+                                      </label>
+                                      <div className="relative">
+                                        <input
+                                          type={showWifiPass ? 'text' : 'password'}
+                                          value={action.wifiPassword || ''}
+                                          onChange={(e) =>
+                                            handleUpdateHubAction(action.id, { wifiPassword: e.target.value })
+                                          }
+                                          placeholder="Network Password (leave blank if open)"
+                                          className="w-full bg-neutral-900 border border-neutral-700 rounded-lg pl-2.5 pr-8 py-1.5 text-xs text-white font-mono"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => setShowWifiPass(!showWifiPass)}
+                                          className="absolute right-2 top-2 text-neutral-400 hover:text-white"
+                                        >
+                                          {showWifiPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* 3. WHATSAPP ACTION */}
+                              {action.type === 'whatsapp' && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                   <input
                                     type="text"
                                     value={action.phone || ''}
                                     onChange={(e) => handleUpdateHubAction(action.id, { phone: e.target.value })}
-                                    placeholder="Phone with country code (e.g. +14155552671)"
-                                    className="bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                    placeholder="Phone with country code (e.g. +919876543210)"
+                                    className="bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
                                   />
                                   <input
                                     type="text"
                                     value={action.message || ''}
                                     onChange={(e) => handleUpdateHubAction(action.id, { message: e.target.value })}
-                                    placeholder="Prefilled message"
+                                    placeholder="Prefilled greeting message"
                                     className="bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
                                   />
                                 </div>
-                              ) : action.type === 'instagram' || action.type === 'facebook' ? (
+                              )}
+
+                              {/* 4. INSTAGRAM OR FACEBOOK */}
+                              {(action.type === 'instagram' || action.type === 'facebook') && (
                                 <input
                                   type="text"
                                   value={action.handle || action.destinationUrl || ''}
-                                  onChange={(e) => handleUpdateHubAction(action.id, { handle: e.target.value, destinationUrl: e.target.value })}
-                                  placeholder={action.type === 'instagram' ? 'Instagram username (e.g. @bellatrattoria)' : 'Facebook page handle'}
-                                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                                />
-                              ) : action.type === 'location' ? (
-                                <input
-                                  type="text"
-                                  value={action.address || action.destinationUrl || ''}
-                                  onChange={(e) => handleUpdateHubAction(action.id, { address: e.target.value, destinationUrl: e.target.value })}
-                                  placeholder="Physical address or Google Maps URL"
-                                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                                />
-                              ) : (
-                                <input
-                                  type="text"
-                                  value={action.destinationUrl || ''}
-                                  onChange={(e) => handleUpdateHubAction(action.id, { destinationUrl: e.target.value })}
-                                  placeholder="Destination URL (e.g. https://...)"
+                                  onChange={(e) =>
+                                    handleUpdateHubAction(action.id, { handle: e.target.value, destinationUrl: e.target.value })
+                                  }
+                                  placeholder={
+                                    action.type === 'instagram'
+                                      ? 'Instagram username (e.g. @yourbusiness)'
+                                      : 'Facebook page handle or URL'
+                                  }
                                   className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
                                 />
                               )}
+
+                              {/* 5. LOCATION / MAPS */}
+                              {action.type === 'location' && (
+                                <input
+                                  type="text"
+                                  value={action.address || action.destinationUrl || ''}
+                                  onChange={(e) =>
+                                    handleUpdateHubAction(action.id, { address: e.target.value, destinationUrl: e.target.value })
+                                  }
+                                  placeholder="Physical address or Google Maps URL"
+                                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                />
+                              )}
+
+                              {/* 6. GENERAL URL (Menu, Website, Contact) */}
+                              {action.type !== 'google_review' &&
+                                action.type !== 'wifi' &&
+                                action.type !== 'whatsapp' &&
+                                action.type !== 'instagram' &&
+                                action.type !== 'facebook' &&
+                                action.type !== 'location' && (
+                                  <input
+                                    type="text"
+                                    value={action.destinationUrl || ''}
+                                    onChange={(e) =>
+                                      handleUpdateHubAction(action.id, { destinationUrl: e.target.value })
+                                    }
+                                    placeholder="Target destination URL (e.g. https://...)"
+                                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                                  />
+                                )}
                             </div>
                           )}
                         </div>
@@ -618,141 +953,10 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
               </div>
             )}
 
-            {/* TAB 3: ORGANIC GOOGLE REVIEWS & FEEDBACK */}
-            {activeTab === 'reviews' && (
-              <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-amber-400" />
-                      <span className="text-xs font-bold text-white">Enable Category AI Google Reviews</span>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={reviewGateEnabled || presentationMode === 'review_gate'}
-                        onChange={(e) => {
-                          setReviewGateEnabled(e.target.checked);
-                          if (e.target.checked) setPresentationMode('review_gate');
-                        }}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-neutral-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
-                    </label>
-                  </div>
-                  <p className="text-xs text-neutral-300">
-                    Gemini 3.8 Flash generates authentic, natural, human 5-star Google review drafts tailored precisely to your custom business category. All customers can submit honest feedback or post directly to Google.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-neutral-400">Business Name</label>
-                    <input
-                      type="text"
-                      value={businessName}
-                      onChange={(e) => setBusinessName(e.target.value)}
-                      placeholder="e.g. Copper Kettle Cafe"
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-neutral-400">
-                      Custom Business Category <span className="text-amber-400">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={businessCategory}
-                      onChange={(e) => setBusinessCategory(e.target.value)}
-                      placeholder="Type any category (e.g. Italian Trattoria, Hair Salon, Dental Clinic...)"
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold text-neutral-400">
-                    Google Review Direct URL
-                  </label>
-                  <input
-                    type="text"
-                    value={googleReviewUrl}
-                    onChange={(e) => setGoogleReviewUrl(e.target.value)}
-                    placeholder="https://g.page/r/your-google-place-id/review"
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
-                  />
-                  <span className="text-[10px] text-neutral-500">
-                    From Google Business Profile &gt; "Ask for reviews" link.
-                  </span>
-                </div>
-
-                {/* Praise Tags */}
-                <div className="space-y-2">
-                  <label className="text-[11px] font-semibold text-neutral-400">
-                    Category Praise Tags (Selected by guests to guide organic AI draft)
-                  </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {praiseTags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-neutral-800 text-neutral-200 border border-neutral-700"
-                      >
-                        <span>{tag}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTag(tag)}
-                          className="text-neutral-400 hover:text-rose-400 ml-0.5"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newTagInput}
-                      onChange={(e) => setNewTagInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddTag();
-                        }
-                      }}
-                      placeholder="Add tag (e.g. Homemade Pasta, Attentive Server, Spotless Clinic)..."
-                      className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddTag}
-                      className="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold"
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
-
-                {/* AI Review Tone */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold text-neutral-400">Default AI Review Style</label>
-                  <select
-                    value={reviewTone}
-                    onChange={(e) => setReviewTone(e.target.value as any)}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                  >
-                    <option value="friendly">Warm & Friendly (Everyday human tone)</option>
-                    <option value="enthusiastic">Enthusiastic & Delighted (Great for restaurants & experiences)</option>
-                    <option value="short_and_sweet">Short, Punchy & Direct (2-3 sentences)</option>
-                    <option value="professional">Detailed & Professional (Great for clinics & services)</option>
-                  </select>
-                </div>
-              </div>
-            )}
-
             {/* Footer Buttons */}
             <div className="pt-3 border-t border-neutral-800 flex items-center justify-between">
               <span className="text-[11px] text-neutral-500">
-                All changes take effect immediately across all devices.
+                All changes take effect immediately across all physical and digital scans.
               </span>
               <div className="flex gap-2">
                 <button

@@ -137,8 +137,15 @@ export interface HubActionItem {
   enabled: boolean;
   destinationUrl?: string;
   wifiData?: WifiData;
+  wifiSsid?: string;
+  wifiPassword?: string;
   vcardData?: VCardData;
   googlePlaceId?: string;
+  enableAiReviews?: boolean;
+  businessName?: string;
+  businessCategory?: string;
+  praiseTags?: string[];
+  customTone?: string;
   phone?: string;
   message?: string;
   handle?: string;

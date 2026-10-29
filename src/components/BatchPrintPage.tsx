@@ -34,7 +34,6 @@ import {
   generateMultiQRA4Blob,
   shareOrSaveMultiQRA4,
   isMobileDevice,
-  LABEL_PRESETS,
   printLabelPresetBatch,
 } from '../utils/a4QrHelper';
 import { DESTINATION_TEMPLATES, DestinationTemplate } from '../utils/destinationTemplates';
@@ -63,7 +62,7 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
   const [prefix, setPrefix] = useState('table');
   const [batchCount, setBatchCount] = useState<number>(12);
   const [batchPassword, setBatchPassword] = useState('');
-  const [selectedLabelPreset, setSelectedLabelPreset] = useState<LabelPresetType>('a4_grid');
+  const selectedLabelPreset: LabelPresetType = 'a4_grid';
   const [gridCols, setGridCols] = useState<2 | 3 | 4>(3);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedBatchLinks, setGeneratedBatchLinks] = useState<LinkRecord[]>([]);
@@ -305,18 +304,18 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
     }
   };
 
-  // Preset Label & Thermal Print
-  const handlePrintPresetBatch = async () => {
+  // Standard A4 Print
+  const handlePrintA4Batch = async () => {
     if (generatedBatchLinks.length === 0) return;
     try {
       setIsPrintingSheet(true);
       await printLabelPresetBatch(
         generatedBatchLinks.map((l) => ({ slug: l.slug, title: l.title })),
-        selectedLabelPreset,
+        'a4_grid',
         batchName.trim() || 'batch-labels'
       );
     } catch (err) {
-      console.error('Print preset error:', err);
+      console.error('Print A4 sheet error:', err);
       window.print();
     } finally {
       setIsPrintingSheet(false);
@@ -341,8 +340,6 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
     return true;
   });
 
-  const activePresetConfig = LABEL_PRESETS[selectedLabelPreset];
-
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
       {/* Top Banner / Actions Header */}
@@ -359,7 +356,7 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
               </span>
             </div>
             <p className="text-xs text-neutral-400 mt-0.5">
-              Generate, print thermal labels or A4 sheets, and assign destinations across all devices.
+              Generate, print standard A4 sheets, and assign destinations across all devices.
             </p>
           </div>
         </div>
@@ -462,9 +459,9 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                     </div>
                   </div>
 
-                  {/* Quantity quick preset buttons */}
+                  {/* Quantity quick count buttons */}
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] text-neutral-500 font-semibold uppercase">Presets:</span>
+                    <span className="text-[10px] text-neutral-500 font-semibold uppercase">Quick Count:</span>
                     {[6, 12, 24, 48, 100, 250].map((qty) => (
                       <button
                         key={qty}
@@ -500,40 +497,6 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                     <p className="text-[10px] text-neutral-400 leading-tight">
                       When set, staff scanning an unassigned QR from this batch can activate & assign destinations using <span className="text-amber-300 font-semibold">only this password</span> without needing admin dashboard login.
                     </p>
-                  </div>
-
-                  {/* Physical Label & Thermal Printer Preset Selector */}
-                  <div>
-                    <label className="block text-neutral-400 font-medium mb-1.5 flex items-center justify-between">
-                      <span>Label & Thermal Printer Preset</span>
-                      <span className="text-[10px] text-indigo-400 font-bold">{activePresetConfig.dimensions}</span>
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {(Object.keys(LABEL_PRESETS) as LabelPresetType[]).map((presetKey) => {
-                        const p = LABEL_PRESETS[presetKey];
-                        const isSelected = selectedLabelPreset === presetKey;
-                        return (
-                          <button
-                            key={presetKey}
-                            type="button"
-                            onClick={() => setSelectedLabelPreset(presetKey)}
-                            className={`p-2.5 rounded-xl border text-left transition-all ${
-                              isSelected
-                                ? 'bg-indigo-600/15 border-indigo-500 text-white'
-                                : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-700'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-[11px] font-bold text-white leading-tight">{p.name}</span>
-                              <span className="text-[9px] px-1 py-0.5 rounded bg-neutral-800 text-neutral-300 font-mono">
-                                {p.badge}
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-neutral-500 leading-tight">{p.dimensions}</p>
-                          </button>
-                        );
-                      })}
-                    </div>
                   </div>
 
                   <button
@@ -640,9 +603,6 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                   <div>
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
                       Print Preview ({generatedBatchLinks.length} QRs)
-                      <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                        {activePresetConfig.name}
-                      </span>
                     </h3>
                     <p className="text-xs text-neutral-400 mt-0.5">
                       Border-free output. Every sticker includes solely the QR code and 4-digit code.
@@ -672,15 +632,15 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                       PNG Image
                     </button>
 
-                    {/* Clean Preset Print Button */}
+                    {/* Clean A4 Print Button */}
                     <button
                       type="button"
-                      onClick={handlePrintPresetBatch}
+                      onClick={handlePrintA4Batch}
                       disabled={isPrintingSheet || generatedBatchLinks.length === 0}
                       className="min-h-[40px] px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-2 transition-all shadow-md active:scale-95 disabled:opacity-50"
                     >
                       <Printer className="w-4 h-4" />
-                      {isPrintingSheet ? 'Preparing Print...' : `Print ${activePresetConfig.badge}`}
+                      {isPrintingSheet ? 'Preparing Print...' : 'Print A4 Sheet'}
                     </button>
                   </div>
                 </div>
@@ -692,112 +652,31 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                   </div>
                 )}
 
-                {/* Printable Grid Preview Box */}
+                {/* Printable Grid Preview Box: Default Standard A4 Grid */}
                 <div className="bg-white rounded-2xl p-6 text-black min-h-[420px] shadow-inner max-h-[640px] overflow-y-auto">
-                  {selectedLabelPreset === 'business_card' ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {generatedBatchLinks.map((link) => {
-                        const last4 = getLast4Letters(link.slug);
-                        return (
-                          <div
-                            key={link.id || link.slug}
-                            className="border-2 border-neutral-300 rounded-xl p-4 flex items-center justify-between gap-4 bg-white shadow-sm"
-                          >
-                            <QRCodeComponent url={`${baseUrl}/r/${link.slug}`} size={110} />
-                            <div className="flex-1 text-center">
-                              <span className="text-[10px] uppercase font-bold text-neutral-500 tracking-wider">
-                                Table Standee
-                              </span>
-                              <div className="text-2xl font-black font-mono tracking-widest text-black my-1">
-                                {last4}
-                              </div>
-                              <span className="text-[10px] font-mono text-neutral-400 block truncate">
-                                /r/{link.slug}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenAssign(link)}
-                                className="mt-2 px-2.5 py-1 rounded-lg bg-neutral-900 text-white text-[10px] font-bold hover:bg-neutral-800 transition-colors"
-                              >
-                                {link.isAssigned ? 'Edit Target' : 'Assign URL'}
-                              </button>
-                            </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
+                    {generatedBatchLinks.map((link) => {
+                      const last4 = getLast4Letters(link.slug);
+                      return (
+                        <div
+                          key={link.id || link.slug}
+                          className="border border-dashed border-neutral-300 rounded-xl p-4 flex flex-col items-center justify-center text-center relative group"
+                        >
+                          <QRCodeComponent url={`${baseUrl}/r/${link.slug}`} size={120} />
+                          <div className="text-lg font-black font-mono tracking-widest text-black mt-2">
+                            {last4}
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : selectedLabelPreset === 'thermal_2in' || selectedLabelPreset === 'thermal_3in' ? (
-                    <div className="max-w-xs mx-auto space-y-6 border-x border-dashed border-neutral-300 px-4 py-2">
-                      <div className="text-center text-[10px] font-mono text-neutral-400 border-b pb-1">
-                        Continuous Thermal POS Roll
-                      </div>
-                      {generatedBatchLinks.map((link) => {
-                        const last4 = getLast4Letters(link.slug);
-                        return (
-                          <div
-                            key={link.id || link.slug}
-                            className="flex flex-col items-center justify-center p-3 border-b border-dashed border-neutral-300 text-center"
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAssign(link)}
+                            className="mt-2 px-2.5 py-1 rounded-lg bg-neutral-900 text-white text-[10px] font-bold hover:bg-neutral-800 transition-colors"
                           >
-                            <QRCodeComponent url={`${baseUrl}/r/${link.slug}`} size={140} />
-                            <div className="text-xl font-black font-mono tracking-widest text-black mt-2">
-                              {last4}
-                            </div>
-                            <span className="text-[10px] font-mono text-neutral-500">
-                              /r/{link.slug}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenAssign(link)}
-                              className="mt-2 text-[10px] font-semibold text-indigo-600 hover:underline"
-                            >
-                              {link.isAssigned ? 'Assigned' : 'Click to Assign'}
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : selectedLabelPreset === 'shelf_tag' ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {generatedBatchLinks.map((link) => {
-                        const last4 = getLast4Letters(link.slug);
-                        return (
-                          <div
-                            key={link.id || link.slug}
-                            className="border border-neutral-300 rounded-lg p-2 flex flex-col items-center justify-center text-center bg-white"
-                          >
-                            <QRCodeComponent url={`${baseUrl}/r/${link.slug}`} size={65} />
-                            <div className="text-xs font-black font-mono text-black mt-1">
-                              {last4}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                      {generatedBatchLinks.map((link) => {
-                        const last4 = getLast4Letters(link.slug);
-                        return (
-                          <div
-                            key={link.id || link.slug}
-                            className="border border-dashed border-neutral-300 rounded-xl p-4 flex flex-col items-center justify-center text-center relative group"
-                          >
-                            <QRCodeComponent url={`${baseUrl}/r/${link.slug}`} size={120} />
-                            <div className="text-lg font-black font-mono tracking-widest text-black mt-2">
-                              {last4}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenAssign(link)}
-                              className="mt-2 px-2.5 py-1 rounded-lg bg-neutral-900 text-white text-[10px] font-bold hover:bg-neutral-800 transition-colors"
-                            >
-                              {link.isAssigned ? 'Active' : 'Assign'}
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                            {link.isAssigned ? 'Active' : 'Assign'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
@@ -978,7 +857,7 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
             {/* One-Tap Destination Templates Section */}
             <div>
               <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider block mb-2">
-                ⚡ 1-Tap Presets (Restaurants & Retail)
+                ⚡ 1-Tap Destination Templates (Restaurants & Retail)
               </span>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {DESTINATION_TEMPLATES.map((tmpl) => {
