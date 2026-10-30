@@ -74,19 +74,20 @@ export const api = {
     labelPreset?: LabelPresetType;
     batchPassword?: string;
   }): Promise<{ success: boolean; batchId: string; batchName: string; count: number; links: LinkRecord[] }> {
-    // 1. Save in Firestore Cloud Database for cross-device sync
+    let result: { success: boolean; batchId: string; batchName: string; count: number; links: LinkRecord[] } | null = null;
+
+    // 1. Save in Firestore Cloud Database for instant cross-device synchronization
     try {
       const firestoreRes = await firestoreDb.generateBatch(payload);
       if (firestoreRes && firestoreRes.links.length > 0) {
-        // Also save in local cache
+        result = { success: true, ...firestoreRes };
         localDb.importBackup({ version: '1.0', exportDate: new Date().toISOString(), links: firestoreRes.links });
-        return { success: true, ...firestoreRes };
       }
     } catch (e) {
       console.warn('Firestore generateBatch fallback:', e);
     }
 
-    // 2. Fallback to Express backend if available
+    // 2. Also sync to Express backend database so server-side redirect engine knows about this batch
     try {
       const res = await fetch('/api/batch-qr/generate', {
         method: 'POST',
@@ -94,8 +95,14 @@ export const api = {
         body: JSON.stringify(payload),
       });
       const data = await parseJsonResponse(res);
-      if (data !== null && res.ok) return data;
-    } catch {}
+      if (!result && data !== null && res.ok) {
+        result = data;
+      }
+    } catch (err) {
+      console.warn('Express generateBatch sync warning:', err);
+    }
+
+    if (result) return result;
 
     // 3. Fallback to localDb
     return localDb.generateBatch(payload);

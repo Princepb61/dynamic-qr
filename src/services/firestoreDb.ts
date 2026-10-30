@@ -15,8 +15,30 @@ import { LinkRecord, ClickRecord, BatchRecord, LabelPresetType } from '../types'
 
 const LINKS_COLLECTION = 'links';
 const CLICKS_COLLECTION = 'clicks';
-const BATCHES_COLLECTION = 'batches';
 const DELETED_LINKS_COLLECTION = 'deleted_links';
+
+/**
+ * Sanitizes data before sending to Firestore by stripping all undefined properties.
+ * In Firebase SDK v9/v10, passing undefined values inside objects causes setDoc to throw:
+ * "Unsupported field value: undefined"
+ */
+export function cleanDataForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) return data;
+  if (Array.isArray(data)) {
+    return data.map((item) => cleanDataForFirestore(item)) as any;
+  }
+  if (typeof data === 'object' && !(data instanceof Date)) {
+    const clean: any = {};
+    for (const key of Object.keys(data as any)) {
+      const val = (data as any)[key];
+      if (val !== undefined) {
+        clean[key] = cleanDataForFirestore(val);
+      }
+    }
+    return clean;
+  }
+  return data;
+}
 
 export const firestoreDb = {
   /**
@@ -191,11 +213,11 @@ export const firestoreDb = {
 
     // Save to Firestore using clean slug as doc ID for instant O(1) lookup
     const docRef = doc(db, LINKS_COLLECTION, clean);
-    await setDoc(docRef, record, { merge: true });
+    await setDoc(docRef, cleanDataForFirestore(record), { merge: true });
 
     // Also write by record.id if different
     if (record.id !== clean) {
-      await setDoc(doc(db, LINKS_COLLECTION, record.id), record, { merge: true });
+      await setDoc(doc(db, LINKS_COLLECTION, record.id), cleanDataForFirestore(record), { merge: true });
     }
 
     // Remove any tombstone if re-assigned
@@ -243,8 +265,8 @@ export const firestoreDb = {
     };
 
     // Save under slug and ID
-    await setDoc(doc(db, LINKS_COLLECTION, slug), newLink);
-    await setDoc(doc(db, LINKS_COLLECTION, id), newLink);
+    await setDoc(doc(db, LINKS_COLLECTION, slug), cleanDataForFirestore(newLink));
+    await setDoc(doc(db, LINKS_COLLECTION, id), cleanDataForFirestore(newLink));
 
     // Remove any tombstone
     await deleteDoc(doc(db, DELETED_LINKS_COLLECTION, slug)).catch(() => {});
@@ -275,8 +297,8 @@ export const firestoreDb = {
       updated.isAssigned = true;
     }
 
-    await setDoc(doc(db, LINKS_COLLECTION, updated.slug), updated, { merge: true });
-    await setDoc(doc(db, LINKS_COLLECTION, updated.id), updated, { merge: true });
+    await setDoc(doc(db, LINKS_COLLECTION, updated.slug), cleanDataForFirestore(updated), { merge: true });
+    await setDoc(doc(db, LINKS_COLLECTION, updated.id), cleanDataForFirestore(updated), { merge: true });
 
     return updated;
   },
@@ -337,10 +359,12 @@ export const firestoreDb = {
     ownerEmail?: string;
     ownerName?: string;
     labelPreset?: LabelPresetType;
+    batchPassword?: string;
   }): Promise<{ batchId: string; batchName: string; count: number; links: LinkRecord[] }> {
     const batchId = `batch_${Date.now()}`;
     const count = Math.min(Math.max(payload.count || 12, 1), 100);
     const prefix = (payload.prefix || 'qr').toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    const cleanBatchPassword = payload.batchPassword && payload.batchPassword.trim().length > 0 ? payload.batchPassword.trim() : undefined;
     const newLinks: LinkRecord[] = [];
     const now = new Date().toISOString();
 
@@ -363,6 +387,7 @@ export const firestoreDb = {
         batchId,
         batchName: payload.batchName,
         batchIndex: i,
+        batchPassword: cleanBatchPassword,
         createdAt: now,
         updatedAt: now,
         tags: ['Pre-Printed', payload.batchName],
@@ -378,8 +403,8 @@ export const firestoreDb = {
         },
       };
 
-      await setDoc(doc(db, LINKS_COLLECTION, slug), link);
-      await setDoc(doc(db, LINKS_COLLECTION, link.id), link);
+      await setDoc(doc(db, LINKS_COLLECTION, slug), cleanDataForFirestore(link));
+      await setDoc(doc(db, LINKS_COLLECTION, link.id), cleanDataForFirestore(link));
       newLinks.push(link);
     }
 
@@ -392,12 +417,13 @@ export const firestoreDb = {
       labelPreset,
       ownerId,
       ownerEmail,
+      batchPassword: cleanBatchPassword,
       createdAt: now,
       unassignedCount: count,
       slugs: newLinks.map((l) => l.slug),
     };
 
-    await setDoc(doc(db, BATCHES_COLLECTION, batchId), batchRecord).catch((e) => {
+    await setDoc(doc(db, BATCHES_COLLECTION, batchId), cleanDataForFirestore(batchRecord)).catch((e) => {
       console.warn('Batch manifest write warning:', e);
     });
 
