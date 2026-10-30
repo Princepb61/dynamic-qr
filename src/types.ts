@@ -127,7 +127,8 @@ export type HubActionType =
   | 'website'
   | 'facebook'
   | 'instagram'
-  | 'location';
+  | 'location'
+  | 'url';
 
 export interface HubActionItem {
   id: string;
@@ -136,6 +137,8 @@ export interface HubActionItem {
   subtitle?: string;
   enabled: boolean;
   destinationUrl?: string;
+  color?: string;
+  icon?: string;
   wifiData?: WifiData;
   wifiSsid?: string;
   wifiPassword?: string;
@@ -156,6 +159,7 @@ export interface MultiActionHubConfig {
   enabled: boolean;
   heading?: string;
   subheading?: string;
+  customImageUrl?: string;
   actions: HubActionItem[];
 }
 

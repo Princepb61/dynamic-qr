@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Star, Sparkles, Copy, Check, ExternalLink, MessageSquare, Send, HeartHandshake, ArrowRight, ShieldCheck, RefreshCw } from 'lucide-react';
 import { ReviewGateConfig } from '../types';
+import { generateProceduralReviews } from '../utils/proceduralReviewGenerator';
+import { getPraiseTagsForCategory } from '../utils/categoryTags';
 
 interface ReviewGatekeeperViewProps {
   businessName: string;
@@ -42,6 +44,7 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
   const [customNote, setCustomNote] = useState('');
   const [tone, setTone] = useState<'enthusiastic' | 'friendly' | 'professional' | 'short_and_sweet'>('enthusiastic');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [regenCount, setRegenCount] = useState(0);
   const [reviewDrafts, setReviewDrafts] = useState<ReviewDraft[]>([]);
   const [copiedDraftId, setCopiedDraftId] = useState<number | null>(null);
   const [redirectingCountdown, setRedirectingCountdown] = useState<number | null>(null);
@@ -57,7 +60,10 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
   const isHighRating = rating !== null && rating >= (config.minRatingForGoogle || 4);
   const isLowRating = rating !== null && rating < (config.minRatingForGoogle || 4);
 
-  const availableTags = config.praiseTags && config.praiseTags.length > 0 ? config.praiseTags : DEFAULT_PRAISE_TAGS;
+  const availableTags =
+    config.praiseTags && config.praiseTags.length > 0
+      ? config.praiseTags
+      : getPraiseTagsForCategory(businessCategory || 'Local Business');
 
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) =>
@@ -68,6 +74,13 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
   const handleGenerateReviews = async () => {
     setIsGenerating(true);
     setReviewDrafts([]);
+    const nextIteration = regenCount + 1;
+    setRegenCount(nextIteration);
+
+    const tagsToUse =
+      selectedTags.length > 0 ? selectedTags : availableTags.slice(0, 3);
+    const dynamicCount = 3 + (nextIteration % 3); // Alternates 3, 4, 5 on each regenerate
+
     try {
       const res = await fetch('/api/ai/generate-review', {
         method: 'POST',
@@ -75,38 +88,34 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
         body: JSON.stringify({
           businessName,
           businessCategory,
-          praiseTags: selectedTags.length > 0 ? selectedTags : ['Great Service', 'Friendly Team'],
+          praiseTags: tagsToUse,
           customNotes: customNote,
           tone,
+          iteration: nextIteration,
+          requestedCount: dynamicCount,
         }),
       });
 
       if (!res.ok) throw new Error('Failed to generate review');
       const data = await res.json();
-      if (data.reviews && Array.isArray(data.reviews)) {
+      if (data.reviews && Array.isArray(data.reviews) && data.reviews.length >= 3) {
         setReviewDrafts(data.reviews);
+        return;
       }
+      throw new Error('Invalid reviews payload');
     } catch (err) {
-      console.error('AI Review Generation error:', err);
-      // Fallback templates so customer never gets stuck
-      const tagsList = selectedTags.length > 0 ? selectedTags.join(', ') : 'great service and warm atmosphere';
-      setReviewDrafts([
-        {
-          id: 1,
-          title: 'Quick & Enthusiastic',
-          text: `Had a wonderful experience at ${businessName}! The service was top notch and everything exceeded my expectations. Highlight: ${tagsList}. Absolutely 5 stars!`,
-        },
-        {
-          id: 2,
-          title: 'Detailed Experience',
-          text: `I recently visited ${businessName} and couldn't be happier. From start to finish, the team was attentive and the quality was outstanding. Definitely worth checking out if you're in the area!`,
-        },
-        {
-          id: 3,
-          title: 'Staff & Atmosphere',
-          text: `Five stars for ${businessName}! What stood out most was how welcoming and professional the staff were. Will definitely be returning soon and recommending to friends.`,
-        },
-      ]);
+      console.warn('AI Review Generation network error, using client-side procedural generator:', err);
+      // High-grade category procedural generator so reviews are completely varied and never repetitive
+      const fallback = generateProceduralReviews({
+        businessName,
+        businessCategory,
+        praiseTags: tagsToUse,
+        customNotes: customNote,
+        tone,
+        iteration: nextIteration,
+        requestedCount: dynamicCount,
+      });
+      setReviewDrafts(fallback);
     } finally {
       setIsGenerating(false);
     }

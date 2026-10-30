@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import * as UAParserModule from 'ua-parser-js';
 import QRCode from 'qrcode';
 import { GoogleGenAI } from '@google/genai';
+import { generateProceduralReviews } from './src/utils/proceduralReviewGenerator';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -81,6 +82,7 @@ export interface LinkRecord {
     enabled: boolean;
     heading?: string;
     subheading?: string;
+    customImageUrl?: string;
     actions: Array<{
       id: string;
       title: string;
@@ -838,9 +840,15 @@ async function startServer() {
           <div class="max-w-md w-full mx-auto my-auto space-y-6">
             <!-- Hub Header -->
             <div class="text-center space-y-2">
-              <div class="w-16 h-16 rounded-2xl bg-indigo-600/15 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mx-auto shadow-lg shadow-indigo-500/10">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h.01"/><path d="M17 7h.01"/><path d="M7 17h.01"/><path d="M17 17h.01"/></svg>
-              </div>
+              ${hub.customImageUrl ? `
+                <div class="w-20 h-20 rounded-2xl overflow-hidden border-2 border-indigo-500/40 mx-auto shadow-xl shadow-indigo-500/10 bg-neutral-900 flex items-center justify-center">
+                  <img src="${escapeHtml(hub.customImageUrl)}" alt="${hubHeading}" class="w-full h-full object-cover">
+                </div>
+              ` : `
+                <div class="w-16 h-16 rounded-2xl bg-indigo-600/15 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mx-auto shadow-lg shadow-indigo-500/10">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h.01"/><path d="M17 7h.01"/><path d="M7 17h.01"/><path d="M17 17h.01"/></svg>
+                </div>
+              `}
               <h1 class="text-2xl sm:text-3xl font-black text-white tracking-tight">${hubHeading}</h1>
               <p class="text-xs sm:text-sm text-neutral-400 max-w-xs mx-auto leading-relaxed">${hubSub}</p>
             </div>
@@ -2464,7 +2472,7 @@ async function startServer() {
   // AI CUSTOM GOOGLE REVIEWS & FEEDBACK INTERCEPT ENDPOINTS
   // -------------------------------------------------------------
 
-  // 1. AI 5-Star Google Review Generator (Powered by Gemini 3.8 Flash)
+  // 1. AI 5-Star Google Review Generator (Powered by Gemini + Logic-Based Procedural Generator)
   app.post('/api/ai/generate-review', async (req: Request, res: Response) => {
     const {
       businessName = 'Local Business',
@@ -2472,73 +2480,28 @@ async function startServer() {
       praiseTags = [],
       customNotes = '',
       tone = 'friendly',
+      iteration = 0,
       requestedCount,
     } = req.body;
 
+    const iterNum = parseInt(iteration, 10) || Date.now();
     // Dynamically vary count between 3 and 5 if not explicitly requested
     const targetCount = Math.min(
-      Math.max(parseInt(requestedCount, 10) || Math.floor(Math.random() * 3) + 3, 3),
+      Math.max(parseInt(requestedCount, 10) || 3 + ((Math.abs(iterNum) + 1) % 3), 3),
       5
     );
 
     const tagsText = Array.isArray(praiseTags) && praiseTags.length > 0 ? praiseTags.join(', ') : 'great service, friendly staff';
-    const catLower = (businessCategory || '').toLowerCase();
 
-    // Expansive pool of category-specific organic human drafts
-    const reviewPool: Array<{ title: string; text: string }> = [];
-
-    if (catLower.includes('food') || catLower.includes('restaurant') || catLower.includes('cafe') || catLower.includes('bakery') || catLower.includes('bar') || catLower.includes('pizza') || catLower.includes('diner') || catLower.includes('trattoria') || catLower.includes('bistro') || catLower.includes('burger')) {
-      reviewPool.push(
-        { title: 'Fresh & Flavorful', text: `Food was hot, fresh, and full of flavor. Our server was attentive without being pushy (${tagsText}). 10/10 dining experience!` },
-        { title: 'New Favorite Spot', text: `Such a welcoming atmosphere at ${businessName}. Portions were great, the food came out quickly, and the staff was so kind. Can't wait to come back.` },
-        { title: 'Super Fast & Tasty', text: `Stopped in for a quick bite and was blown away. Fast service, spotless dining area, and genuinely delicious food. Highly recommend!` },
-        { title: 'Friendly Hospitality', text: `From the moment we walked in, the team made us feel right at home. Great food recommendations and generous portions (${tagsText}).` },
-        { title: 'Consistent Quality', text: `We visit ${businessName} regularly and they never disappoint. The quality is always top-notch and the staff always has a smile on their face.` },
-        { title: 'Great Vibe & Value', text: `Amazing value for such great quality food. The vibe is relaxed and comfortable, and the specials are always worth ordering.` }
-      );
-    } else if (catLower.includes('salon') || catLower.includes('barber') || catLower.includes('spa') || catLower.includes('hair') || catLower.includes('nail') || catLower.includes('beauty')) {
-      reviewPool.push(
-        { title: 'Loved the Results', text: `Walked out feeling incredible! They took their time to understand exactly what I wanted and executed it flawlessly (${tagsText}).` },
-        { title: 'Clean & Relaxing', text: `Super clean salon with such a calming aesthetic. The staff is warm, professional, and genuinely skilled at what they do.` },
-        { title: 'Great Attention to Detail', text: `Best haircut and styling I've had in a long time. Zero rushing and incredible attention to detail. 5 stars all around!` },
-        { title: 'Always on Time', text: `Appreciated that my appointment started right on time. Welcoming reception, very clean tools, and top-tier results.` },
-        { title: 'Highly Skilled Team', text: `The team at ${businessName} knows what they are doing. Very talented, friendly conversation, and fantastic results.` }
-      );
-    } else if (catLower.includes('dental') || catLower.includes('clinic') || catLower.includes('health') || catLower.includes('doctor') || catLower.includes('med') || catLower.includes('therapy')) {
-      reviewPool.push(
-        { title: 'Gentle & Patient', text: `The team at ${businessName} put all my anxiety at ease. Very gentle, explained each step thoroughly, and virtually painless.` },
-        { title: 'Punctual & Thorough', text: `Extremely clean and modern facility. Zero waiting room delay, and the doctor took time to listen and answer all my questions (${tagsText}).` },
-        { title: 'Compassionate Care', text: `Best experience I've had at a clinic. Warm front desk staff, comfortable environment, and very caring practitioners.` },
-        { title: 'Very Professional', text: `Everything was handled smoothly from check-in to checkout. Transparent explanations and excellent follow-up care.` }
-      );
-    } else if (catLower.includes('auto') || catLower.includes('repair') || catLower.includes('car') || catLower.includes('mechanic') || catLower.includes('detail') || catLower.includes('tire')) {
-      reviewPool.push(
-        { title: 'Honest & Reliable', text: `Honest diagnostics and fair pricing with zero surprise add-ons. They fixed the issue quickly and had my vehicle ready right on time.` },
-        { title: 'Quality Workmanship', text: `Top-notch service at ${businessName}. Transparent communication, explained what needed immediate attention vs what could wait (${tagsText}).` },
-        { title: 'Trustworthy Mechanics', text: `Hard to find automotive shops you can truly trust, but this team is the real deal. Prompt, polite, and great craftsmanship.` },
-        { title: 'Fast Turnaround', text: `Dropped it off in the morning and it was done earlier than estimated. Car runs perfectly now. Will definitely return!` }
-      );
-    } else {
-      reviewPool.push(
-        { title: 'Outstanding Service', text: `Really impressed with ${businessName}. The team was super helpful, welcoming, and everything went smoothly from start to finish (${tagsText}).` },
-        { title: 'High Quality & Professional', text: `Professional, prompt, and attentive. You can tell they take genuine pride in taking care of their customers. Highly recommended!` },
-        { title: 'Great Experience', text: `Five stars for ${businessName}! The atmosphere is great and the staff went out of their way to make sure I had everything I needed.` },
-        { title: 'Smooth & Easy', text: `From initial contact to completion, the entire process was seamless. Friendly people, fair pricing, and great communication.` },
-        { title: 'Will Be Back', text: `Great experience all around. Good value, wonderful service, and very trustworthy. Glad to support a standout local business!` }
-      );
-    }
-
-    // Shuffle pool with Fisher-Yates to guarantee distinct non-repeating fallbacks
-    const shuffled = [...reviewPool];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    const fallbackReviews = shuffled.slice(0, targetCount).map((item, idx) => ({
-      id: idx + 1,
-      title: item.title,
-      text: item.text,
-    }));
+    const fallbackReviews = generateProceduralReviews({
+      businessName,
+      businessCategory,
+      praiseTags,
+      customNotes,
+      tone,
+      iteration: iterNum,
+      requestedCount: targetCount,
+    });
 
     if (!process.env.GEMINI_API_KEY || !ai) {
       return res.json({ reviews: fallbackReviews });
@@ -2549,7 +2512,7 @@ async function startServer() {
 Selected highlights from this visit: ${tagsText}.
 Optional customer note: ${customNotes || 'none'}.
 Desired tone: ${tone}.
-Randomizer context: ${Date.now()}-${Math.random().toString(36).substring(2, 7)}.
+Iteration seed: ${iterNum}.
 
 CRITICAL INSTRUCTIONS FOR 100% ORGANIC & VARIED REVIEWS:
 1. Generate EXACTLY ${targetCount} DISTINCT reviews (count: ${targetCount}).
@@ -2573,31 +2536,31 @@ Respond ONLY with valid JSON in this exact structure:
 
       const aiResponse = await Promise.race([
         ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-3.1-flash-lite',
           contents: prompt,
           config: {
             responseMimeType: 'application/json',
-            temperature: 1.05,
+            temperature: 1.1,
           },
         }),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('AI generation timed out')), 5000)
+          setTimeout(() => reject(new Error('AI generation timed out')), 12000)
         ),
       ]);
 
       const responseText = aiResponse.text?.trim() || '';
       try {
         const parsed = JSON.parse(responseText);
-        if (parsed.reviews && Array.isArray(parsed.reviews) && parsed.reviews.length > 0) {
+        if (parsed.reviews && Array.isArray(parsed.reviews) && parsed.reviews.length >= 3) {
           return res.json(parsed);
         }
       } catch (err) {
-        console.warn('Failed to parse Gemini JSON output, using randomized fallback:', err);
+        console.warn('Failed to parse Gemini JSON output, using procedural fallback:', err);
       }
 
       return res.json({ reviews: fallbackReviews });
     } catch (err: any) {
-      console.error('Gemini generate review error:', err);
+      console.warn('Gemini generate review error/timeout, using procedural fallback:', err?.message || err);
       return res.json({ reviews: fallbackReviews });
     }
   });

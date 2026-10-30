@@ -39,7 +39,7 @@ interface ClientRedirectHandlerProps {
   slug: string;
 }
 
-type PresetType = 'google_review' | 'whatsapp' | 'instagram' | 'facebook' | 'wifi' | 'vcard' | 'url' | 'multi_action_hub';
+type PresetType = 'google_review' | 'whatsapp' | 'instagram' | 'facebook' | 'wifi' | 'vcard' | 'url';
 
 export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ slug }) => {
   const cleanSlug = slug.trim().toLowerCase().replace(/^\/r\//, '').replace(/^\//, '');
@@ -451,43 +451,6 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
         };
       }
 
-      case 'multi_action_hub': {
-        const hTitle = assignTitle.trim() || `Smart Link Hub (${cleanSlug})`;
-        return {
-          destinationUrl: fullRedirectUrl,
-          contentType: 'multi_action_hub',
-          presentationMode: 'multi_action_hub',
-          hubConfig: {
-            enabled: true,
-            heading: hTitle,
-            subheading: 'Choose an option below',
-            actions: [
-              {
-                id: '1',
-                type: 'google_review',
-                title: '5-Star Google Review',
-                destinationUrl: googlePlaceIdOrUrl.trim() || undefined,
-                enabled: true,
-              },
-              {
-                id: '2',
-                type: 'whatsapp',
-                title: 'WhatsApp Ordering & Chat',
-                phone: waPhone.trim() || undefined,
-                enabled: true,
-              },
-              {
-                id: '3',
-                type: 'website',
-                title: 'Official Website',
-                destinationUrl: customUrl.trim() || undefined,
-                enabled: true,
-              },
-            ],
-          },
-          title: hTitle,
-        };
-      }
 
       case 'url':
       default: {
@@ -843,25 +806,6 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
                     </div>
                   </button>
 
-                  {/* Preset 7: Multi-Action Smart Hub */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActivePreset('multi_action_hub');
-                      if (!assignTitle || assignTitle.includes('QR Code')) setAssignTitle('Smart Hub');
-                    }}
-                    className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all ${
-                      activePreset === 'multi_action_hub'
-                        ? 'bg-indigo-500/10 border-indigo-500/60 text-indigo-300 shadow-sm'
-                        : 'bg-neutral-800/60 border-neutral-700/60 text-neutral-400 hover:text-white hover:bg-neutral-800'
-                    }`}
-                  >
-                    <Layers className="w-5 h-5 text-indigo-400 mb-1" />
-                    <div>
-                      <span className="font-bold text-xs block text-white">Smart Hub</span>
-                      <span className="text-[10px] text-neutral-400">All-In-One Landing</span>
-                    </div>
-                  </button>
 
                   {/* Preset 8: Custom Website URL */}
                   <button
@@ -1427,9 +1371,19 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
         <div className="max-w-md w-full mx-auto my-auto space-y-6">
           {/* Brand Header */}
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 rounded-2xl bg-indigo-600/15 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mx-auto shadow-lg shadow-indigo-500/10">
-              <Layers className="w-8 h-8" />
-            </div>
+            {hub.customImageUrl ? (
+              <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-indigo-500/40 mx-auto shadow-xl shadow-indigo-500/10 bg-neutral-900 flex items-center justify-center">
+                <img
+                  src={hub.customImageUrl}
+                  alt={hub.heading || link.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className="w-16 h-16 rounded-2xl bg-indigo-600/15 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mx-auto shadow-lg shadow-indigo-500/10">
+                <Layers className="w-8 h-8" />
+              </div>
+            )}
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">{hub.heading || link.title}</h1>
             <p className="text-xs sm:text-sm text-neutral-400 max-w-xs mx-auto leading-relaxed">{hub.subheading || link.description || 'Tap any option below to connect'}</p>
           </div>

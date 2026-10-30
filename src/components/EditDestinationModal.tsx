@@ -26,6 +26,8 @@ import {
   Lock,
   Eye,
   EyeOff,
+  ImageIcon,
+  Upload,
 } from 'lucide-react';
 import { QRStudioModal } from './QRStudioModal';
 import { getPraiseTagsForCategory } from '../utils/categoryTags';
@@ -118,6 +120,72 @@ const DEFAULT_HUB_ACTIONS: HubActionItem[] = [
   },
 ];
 
+interface SwitchButtonProps {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  activeColor?: 'indigo' | 'amber' | 'emerald';
+  onText?: string;
+  offText?: string;
+}
+
+const SwitchButton: React.FC<SwitchButtonProps> = ({
+  checked,
+  onChange,
+  activeColor = 'indigo',
+  onText = 'ON',
+  offText = 'OFF',
+}) => {
+  const bg = {
+    indigo: checked ? '#4f46e5' : '#262626',
+    amber: checked ? '#f59e0b' : '#262626',
+    emerald: checked ? '#10b981' : '#262626',
+  };
+
+  const badgeClass = {
+    indigo: checked
+      ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+      : 'bg-neutral-800 text-neutral-400 border-neutral-700',
+    amber: checked
+      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+      : 'bg-neutral-800 text-neutral-400 border-neutral-700',
+    emerald: checked
+      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+      : 'bg-neutral-800 text-neutral-400 border-neutral-700',
+  };
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onChange(!checked);
+      }}
+      className="inline-flex items-center gap-2 cursor-pointer select-none group focus:outline-none"
+    >
+      <span
+        className={`px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-wider transition-colors ${badgeClass[activeColor]}`}
+      >
+        {checked ? onText : offText}
+      </span>
+      <div
+        style={{ backgroundColor: bg[activeColor], transition: 'background-color 200ms ease' }}
+        className="relative inline-flex h-6 w-11 shrink-0 rounded-full p-0.5 border border-white/10"
+      >
+        <div
+          style={{
+            transform: checked ? 'translateX(20px)' : 'translateX(0px)',
+            transition: 'transform 200ms cubic-bezier(0.4, 0, 0.2, 1)',
+          }}
+          className="h-4.5 w-4.5 rounded-full bg-white shadow-md pointer-events-none"
+        />
+      </div>
+    </button>
+  );
+};
+
 export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
   link,
   isOpen,
@@ -137,6 +205,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
   const [hubEnabled, setHubEnabled] = useState(false);
   const [hubHeading, setHubHeading] = useState('');
   const [hubSubheading, setHubSubheading] = useState('');
+  const [hubCustomImage, setHubCustomImage] = useState('');
   const [hubActions, setHubActions] = useState<HubActionItem[]>(DEFAULT_HUB_ACTIONS);
 
   // Quick tag input state for the Google Review action inside Hub
@@ -169,6 +238,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
         setHubEnabled(link.hubConfig.enabled !== false);
         setHubHeading(link.hubConfig.heading || link.title || '');
         setHubSubheading(link.hubConfig.subheading || 'Choose an option below');
+        setHubCustomImage(link.hubConfig.customImageUrl || '');
 
         // Merge with existing reviewGate configs if review action exists
         const mergedActions = link.hubConfig.actions.map((act) => {
@@ -203,6 +273,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
         setHubEnabled(link.presentationMode === 'multi_action_hub');
         setHubHeading(link.title || '');
         setHubSubheading('Tap any option below to get started');
+        setHubCustomImage('');
         setHubActions(
           DEFAULT_HUB_ACTIONS.map((act) => {
             if (act.type === 'google_review') {
@@ -283,6 +354,43 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
     );
   };
 
+  const handleAddHubAction = (type: HubActionItem['type'] = 'url') => {
+    const newId = `action_${Date.now()}`;
+    const defaults: Record<string, { title: string; subtitle: string; icon: string; color: string }> = {
+      url: { title: 'Custom Website Link', subtitle: 'Visit our official website', icon: 'globe', color: 'indigo' },
+      whatsapp: { title: 'WhatsApp Us', subtitle: 'Chat with our support team', icon: 'message-square', color: 'emerald' },
+      menu: { title: 'Digital Menu', subtitle: 'Browse items and pricing', icon: 'utensils', color: 'orange' },
+      location: { title: 'Find Us on Maps', subtitle: 'Turn-by-turn navigation', icon: 'map-pin', color: 'rose' },
+      instagram: { title: 'Instagram Profile', subtitle: 'Follow our daily updates', icon: 'camera', color: 'pink' },
+      facebook: { title: 'Facebook Page', subtitle: 'Connect with our page', icon: 'share-2', color: 'blue' },
+      wifi: { title: 'Guest Wi-Fi', subtitle: 'Connect to fast guest internet', icon: 'wifi', color: 'cyan' },
+      contact: { title: 'Save Contact Card', subtitle: 'Add details to phone contacts', icon: 'user', color: 'purple' },
+      google_review: { title: 'Review on Google', subtitle: 'Share your 5-star experience', icon: 'star', color: 'amber' },
+    };
+
+    const meta = defaults[type] || defaults.url;
+    const newAction: HubActionItem = {
+      id: newId,
+      type,
+      title: meta.title,
+      subtitle: meta.subtitle,
+      destinationUrl: '',
+      enabled: true,
+      color: meta.color,
+      icon: meta.icon,
+      enableAiReviews: type === 'google_review' ? true : undefined,
+      businessName: type === 'google_review' ? (title || link?.title || '') : undefined,
+      businessCategory: type === 'google_review' ? 'Restaurant & Cafe' : undefined,
+      praiseTags: type === 'google_review' ? getPraiseTagsForCategory('Restaurant & Cafe') : undefined,
+    };
+
+    setHubActions((prev) => [...prev, newAction]);
+  };
+
+  const handleDeleteHubAction = (actionId: string) => {
+    setHubActions((prev) => prev.filter((a) => a.id !== actionId));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -292,7 +400,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
       target = 'https://' + target;
     }
 
-    const isHubActive = hubEnabled || presentationMode === 'multi_action_hub';
+    const isHubActive = presentationMode === 'multi_action_hub';
 
     if (isHubActive && !target) {
       target = `/r/${link.slug}`;
@@ -307,8 +415,11 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
     const reviewAct = hubActions.find((a) => a.type === 'google_review');
     const wifiAct = hubActions.find((a) => a.type === 'wifi');
 
+    const isAiReviewsEnabled =
+      reviewAct ? reviewAct.enabled !== false && reviewAct.enableAiReviews !== false : false;
+
     const reviewGateConfig: ReviewGateConfig = {
-      enabled: reviewAct ? reviewAct.enabled !== false && reviewAct.enableAiReviews !== false : false,
+      enabled: isAiReviewsEnabled,
       businessName: (reviewAct?.businessName || title || link.title || '').trim(),
       businessCategory: (reviewAct?.businessCategory || 'Local Business').trim(),
       googleReviewUrl: (reviewAct?.destinationUrl || target || '').trim(),
@@ -323,10 +434,11 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
       enabled: isHubActive,
       heading: hubHeading.trim() || title || link.title,
       subheading: hubSubheading.trim() || 'Choose an option below',
+      customImageUrl: hubCustomImage.trim() || undefined,
       actions: hubActions,
     };
 
-    const effectivePresentationMode = isHubActive ? 'multi_action_hub' : presentationMode;
+    const effectivePresentationMode = isHubActive ? 'multi_action_hub' : 'instant_redirect';
 
     try {
       setIsSaving(true);
@@ -429,6 +541,56 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
               </div>
             )}
 
+            {/* Top-Level Mode Selector: Single Direct Link vs Multi-Action Hub */}
+            <div className="p-3.5 bg-neutral-950 rounded-2xl border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`p-2 rounded-xl transition-colors ${
+                    presentationMode === 'multi_action_hub'
+                      ? 'bg-indigo-500/20 text-indigo-400'
+                      : 'bg-emerald-500/20 text-emerald-400'
+                  }`}
+                >
+                  {presentationMode === 'multi_action_hub' ? <Layers className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-white">QR Code Scan Behavior</span>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                        presentationMode === 'multi_action_hub'
+                          ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      }`}
+                    >
+                      {presentationMode === 'multi_action_hub' ? 'Multi-Action Hub' : 'Single Direct Link'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-neutral-400 block mt-0.5">
+                    {presentationMode === 'multi_action_hub'
+                      ? 'Displays mobile landing page with your buttons, review AI & guest Wi-Fi.'
+                      : 'Bypasses landing page and redirects directly to the primary link.'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                <SwitchButton
+                  checked={presentationMode === 'multi_action_hub'}
+                  onChange={(checked) => {
+                    setHubEnabled(checked);
+                    setPresentationMode(checked ? 'multi_action_hub' : 'instant_redirect');
+                    if (checked) {
+                      setActiveTab('hub');
+                    }
+                  }}
+                  activeColor="indigo"
+                  onText="HUB ACTIVE"
+                  offText="SINGLE LINK"
+                />
+              </div>
+            </div>
+
             {/* TAB 1: GENERAL DESTINATION & MODE */}
             {activeTab === 'general' && (
               <div className="space-y-4">
@@ -492,40 +654,59 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                 </div>
 
                 <div className="space-y-2 pt-2">
-                  <label className="text-xs font-bold text-white block">Scan Presentation Mode</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {[
-                      {
-                        id: 'multi_action_hub',
-                        title: '🔗 Multi-Action Hub',
-                        desc: 'All-in-one hub with Google AI reviews, WhatsApp, Wi-Fi & Menu',
-                      },
-                      {
-                        id: 'instant_redirect',
-                        title: '⚡ Instant 307 Redirect',
-                        desc: 'Redirects browser immediately to primary destination URL',
-                      },
-                    ].map((mode) => (
-                      <button
-                        key={mode.id}
-                        type="button"
-                        onClick={() => {
-                          setPresentationMode(mode.id as any);
-                          if (mode.id === 'multi_action_hub') {
-                            setHubEnabled(true);
-                            setActiveTab('hub');
-                          }
-                        }}
-                        className={`p-3 rounded-2xl border text-left transition-all ${
-                          presentationMode === mode.id
-                            ? 'bg-indigo-500/10 border-indigo-500 text-white shadow-sm'
-                            : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700'
-                        }`}
-                      >
-                        <span className="text-xs font-bold block">{mode.title}</span>
-                        <span className="text-[10px] text-neutral-500 block mt-0.5">{mode.desc}</span>
-                      </button>
-                    ))}
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-white block">Active Scan Mode</label>
+                    <span className="text-[11px] text-neutral-400">
+                      {presentationMode === 'multi_action_hub' ? 'Multi-Action Hub Active' : 'Single Direct Mode Active'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPresentationMode('instant_redirect');
+                        setHubEnabled(false);
+                      }}
+                      className={`p-3.5 rounded-2xl border text-left transition-all ${
+                        presentationMode !== 'multi_action_hub'
+                          ? 'bg-emerald-500/10 border-emerald-500 text-white shadow-sm ring-1 ring-emerald-500/40'
+                          : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold block text-emerald-300">⚡ Single Direct Destination</span>
+                        {presentationMode !== 'multi_action_hub' && (
+                          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded font-mono font-bold">ACTIVE</span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-neutral-400 block leading-relaxed">
+                        Redirects customer immediately to your primary URL or review link.
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPresentationMode('multi_action_hub');
+                        setHubEnabled(true);
+                        setActiveTab('hub');
+                      }}
+                      className={`p-3.5 rounded-2xl border text-left transition-all ${
+                        presentationMode === 'multi_action_hub'
+                          ? 'bg-indigo-500/10 border-indigo-500 text-white shadow-sm ring-1 ring-indigo-500/40'
+                          : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold block text-indigo-300">🔗 Multi-Action Smart Hub</span>
+                        {presentationMode === 'multi_action_hub' && (
+                          <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-1.5 py-0.5 rounded font-mono font-bold">ACTIVE</span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-neutral-400 block leading-relaxed">
+                        All-in-one landing page with Google AI reviews, WhatsApp, Wi-Fi, digital menu & logo.
+                      </span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -534,28 +715,114 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
             {/* TAB 2: MULTI-ACTION SMART HUB (Includes Organic Google AI Reviews & Wi-Fi) */}
             {activeTab === 'hub' && (
               <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 space-y-2">
+                <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-indigo-400" />
-                      <span className="text-xs font-bold text-white">Enable Multi-Action Smart Hub</span>
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-indigo-500/20 text-indigo-400">
+                        <Layers className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-white block">Multi-Action Smart Hub</span>
+                        <span className="text-[11px] text-neutral-300 block">
+                          {presentationMode === 'multi_action_hub'
+                            ? 'ON — Displays multi-button smart mobile landing page'
+                            : 'OFF — Bypasses hub and redirects directly to single URL'}
+                        </span>
+                      </div>
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={hubEnabled || presentationMode === 'multi_action_hub'}
-                        onChange={(e) => {
-                          setHubEnabled(e.target.checked);
-                          if (e.target.checked) setPresentationMode('multi_action_hub');
-                        }}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-neutral-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                    </label>
+                    <SwitchButton
+                      checked={presentationMode === 'multi_action_hub'}
+                      onChange={(checked) => {
+                        setHubEnabled(checked);
+                        setPresentationMode(checked ? 'multi_action_hub' : 'instant_redirect');
+                      }}
+                      activeColor="indigo"
+                      onText="HUB ON"
+                      offText="HUB OFF"
+                    />
                   </div>
-                  <p className="text-xs text-neutral-300">
+                  <p className="text-xs text-neutral-300 leading-relaxed">
                     A single QR code serves an interactive smart landing page on mobile. Guests can generate organic AI reviews, connect to guest Wi-Fi, chat on WhatsApp, or view digital menus.
                   </p>
+                </div>
+
+                {/* Hub Custom Image / Brand Logo */}
+                <div className="p-4 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 text-indigo-400" />
+                      <span className="text-xs font-bold text-white">Hub Header Brand Logo / Avatar</span>
+                    </div>
+                    {hubCustomImage && (
+                      <button
+                        type="button"
+                        onClick={() => setHubCustomImage('')}
+                        className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 transition-colors"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Remove Image</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    {/* Preview circle / rounded square */}
+                    <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-dashed border-neutral-700 bg-neutral-900 shrink-0 flex items-center justify-center relative shadow-inner">
+                      {hubCustomImage ? (
+                        <img
+                          src={hubCustomImage}
+                          alt="Hub Logo Preview"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-center p-2">
+                          <Layers className="w-6 h-6 text-neutral-600 mx-auto" />
+                          <span className="text-[9px] text-neutral-500 block leading-tight mt-1">Default Icon</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 w-full space-y-2">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={hubCustomImage}
+                          onChange={(e) => setHubCustomImage(e.target.value)}
+                          placeholder="Paste image URL (https://...) or upload below"
+                          className="flex-1 bg-neutral-900 border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 font-mono"
+                        />
+                        <label className="px-3.5 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-semibold cursor-pointer flex items-center gap-1.5 transition-colors shrink-0">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Upload File</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                if (file.size > 3 * 1024 * 1024) {
+                                  alert('Image size exceeds 3MB limit. Please choose a smaller image.');
+                                  return;
+                                }
+                                const reader = new FileReader();
+                                reader.onload = (loadEvent) => {
+                                  const result = loadEvent.target?.result as string;
+                                  if (result) {
+                                    setHubCustomImage(result);
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <p className="text-[10px] text-neutral-400">
+                        Shows prominently as the avatar / brand logo atop your Multi-Action Smart Hub when scanned.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -621,17 +888,23 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                                 )}
                               </div>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleHubAction(action.id)}
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors ${
-                                isEnabled
-                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                  : 'bg-neutral-800 text-neutral-500 border-neutral-700'
-                              }`}
-                            >
-                              {isEnabled ? 'ACTIVE' : 'DISABLED'}
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <SwitchButton
+                                checked={isEnabled}
+                                onChange={() => handleToggleHubAction(action.id)}
+                                activeColor="indigo"
+                                onText="ON"
+                                offText="OFF"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteHubAction(action.id)}
+                                className="p-1.5 text-neutral-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                                title="Remove this action card"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
 
                           {isEnabled && (
@@ -672,21 +945,21 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                                           Organic Google AI Review Generator
                                         </span>
                                         <span className="text-[10px] text-neutral-400 block">
-                                          Guests pick category praise tags; AI creates 3-5 unique review drafts
+                                          {action.enableAiReviews !== false
+                                            ? 'ON: Guests pick category praise tags; AI creates 3-5 unique review drafts'
+                                            : 'OFF: Direct mode. Guests go directly to your Google Review page'}
                                         </span>
                                       </div>
                                     </div>
-                                    <label className="relative inline-flex items-center cursor-pointer">
-                                      <input
-                                        type="checkbox"
-                                        checked={action.enableAiReviews !== false}
-                                        onChange={(e) =>
-                                          handleUpdateHubAction(action.id, { enableAiReviews: e.target.checked })
-                                        }
-                                        className="sr-only peer"
-                                      />
-                                      <div className="w-9 h-5 bg-neutral-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
-                                    </label>
+                                    <SwitchButton
+                                      checked={action.enableAiReviews !== false}
+                                      onChange={(checked) => {
+                                        handleUpdateHubAction(action.id, { enableAiReviews: checked });
+                                      }}
+                                      activeColor="amber"
+                                      onText="AI ON"
+                                      offText="AI OFF"
+                                    />
                                   </div>
 
                                   {/* Direct Google Review URL */}
@@ -822,6 +1095,13 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                                       </div>
                                     </div>
                                   )}
+
+                                  {action.enableAiReviews === false && (
+                                    <div className="p-2.5 rounded-xl bg-neutral-900/90 border border-neutral-800 text-[11px] text-neutral-400 flex items-center justify-between">
+                                      <span>Direct Google Review redirect is active. Guests will bypass AI drafting and open your Google Review link immediately.</span>
+                                      <span className="text-amber-400/90 font-mono text-[10px] shrink-0 ml-2">Direct Link</span>
+                                    </div>
+                                  )}
                                 </div>
                               )}
 
@@ -948,6 +1228,44 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                         </div>
                       );
                     })}
+
+                    {/* Add New Action / Link to Smart Hub */}
+                    <div className="p-4 rounded-2xl border border-dashed border-indigo-500/30 bg-neutral-950/80 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Plus className="w-4 h-4 text-indigo-400" />
+                          <span className="text-xs font-bold text-white">Add New Action or Link to Hub</span>
+                        </div>
+                        <span className="text-[10px] text-neutral-400">Choose action type</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          { type: 'url', label: 'Website Link', icon: Globe, color: 'text-indigo-400', border: 'hover:border-indigo-500/50' },
+                          { type: 'whatsapp', label: 'WhatsApp', icon: MessageCircle, color: 'text-emerald-400', border: 'hover:border-emerald-500/50' },
+                          { type: 'menu', label: 'Digital Menu', icon: Utensils, color: 'text-orange-400', border: 'hover:border-orange-500/50' },
+                          { type: 'location', label: 'Google Maps', icon: MapPin, color: 'text-rose-400', border: 'hover:border-rose-500/50' },
+                          { type: 'instagram', label: 'Instagram', icon: Share2, color: 'text-pink-400', border: 'hover:border-pink-500/50' },
+                          { type: 'facebook', label: 'Facebook', icon: Share2, color: 'text-blue-400', border: 'hover:border-blue-500/50' },
+                          { type: 'wifi', label: 'Guest Wi-Fi', icon: Wifi, color: 'text-cyan-400', border: 'hover:border-cyan-500/50' },
+                          { type: 'contact', label: 'Contact Card', icon: User, color: 'text-purple-400', border: 'hover:border-purple-500/50' },
+                        ].map((btn) => {
+                          const IconComp = btn.icon;
+                          return (
+                            <button
+                              key={btn.type}
+                              type="button"
+                              onClick={() => handleAddHubAction(btn.type as any)}
+                              className={`p-2.5 rounded-xl bg-neutral-900 border border-neutral-800 ${btn.border} text-left flex items-center gap-2 transition-all group`}
+                            >
+                              <IconComp className={`w-4 h-4 ${btn.color} shrink-0`} />
+                              <span className="text-[11px] font-semibold text-neutral-300 group-hover:text-white truncate">
+                                + {btn.label}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
