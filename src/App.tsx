@@ -346,6 +346,7 @@ export default function App() {
                     onDeleteLink={handleDeleteLink}
                     onToggleStatus={handleToggleStatus}
                     onOpenCreate={() => setIsCreateOpen(true)}
+                    onUpdateLinkTags={(id, tags) => handleUpdateDestination(id, { tags })}
                   />
                 </div>
               </div>

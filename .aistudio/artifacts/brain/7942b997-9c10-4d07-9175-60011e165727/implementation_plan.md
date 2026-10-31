@@ -1,27 +1,34 @@
-# TapLocal Multi-Action Smart Hub, Batch Security & Organic Review Engine
+# TapLocal Live Google Maps Search & Print Shop Mockup Exporter
 
-Deliver an all-in-one Multi-Action Smart Hub QR system allowing owners to bundle multiple destinations into a single interactive landing page, configure per-batch passwords for zero-login staff assignment, generate natural category-specific Google reviews with Gemini 3.8 Flash, fix mobile Visual QR Designer controls, ensure rock-solid cross-device persistence, and upgrade in-app camera scanning with universal pure-JS decoding.
+Deliver an integrated Live Google Maps Place Auto-Search tool and a tailored Bulk Print Shop Export system organized specifically for multi-mockup physical production (Google Reviews standees, Digital Menu table-tents, WhatsApp placards, Instagram & Facebook social cards).
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> The following critical product decisions have been confirmed and incorporated into this blueprint:
+> The following critical product decisions have been incorporated based on your production workflow:
 
-- **Multi-Action QR Behavior**: When a QR code is assigned with multiple selected action destinations (e.g. Google Reviews + WhatsApp + Menu + Wi-Fi + Location), scanning displays an **Interactive Smart Hub** landing page with branded action cards rather than silently picking one.
-- **Batch-Specific Passwords**: Unassigned QR codes created inside a batch can be claimed on-site by entering **only that batch's specific password**, preventing unauthorized reassignments while avoiding requiring staff to possess full super-admin accounts.
-- **Dynamic Category-Tailored AI Reviews**: Rather than a static set of praise tags, owners can type or choose **any custom business category** (e.g. Italian Trattoria, Pediatric Clinic, Boutique Salon, Auto Detailing, Law Firm). Gemini 3.8 Flash will generate authentic, conversational, and realistic review drafts tailored specifically to that business category and service highlights.
-- **Feature Deprecations**: Completely remove conditional routing (time-of-day / device OS redirects), remove eye pattern customizers from the Visual QR Designer, and remove the "1-3 star dissatisfied ratings are privately intercepted to your admin inbox!" banner/mechanics, allowing direct, transparent customer feedback and real organic reviews.
+- **Mockup-Centric Organization**: Because you place individual QR codes into pre-designed graphic mockups (Google Reviews, Menu, WhatsApp, Facebook, Instagram) before printing, the Bulk Export will organize QR files into categorized folders (`/Google_Reviews/`, `/Digital_Menus/`, `/WhatsApp_Placards/`, `/Instagram_Cards/`, `/Facebook_Stands/`, `/Smart_Hub/`) with transparent high-resolution PNGs (300 DPI equivalent) and scalable vector SVGs.
+- **Pre-Print Mockup Assignment**: Each QR link and batch item will have a visible **Target Mockup Template** selector so you can tag which physical graphic template each QR belongs to (e.g., Table 01 -> Google Review Stand, Table 02 -> Menu Card).
+- **Print Shop Production Manifest (CSV)**: Generates a standardized print shop spreadsheet listing `Filename`, `Table/Stand Number`, `Target Mockup`, `QR Slug`, `Permanent Short URL`, `Destination Summary`, and `Batch Name` for easy merge into Adobe Illustrator, Photoshop, InDesign, CorelDraw, or laser engraving/vinyl cutters.
+- **Live Google Maps Place Auto-Search**: Live autocomplete & business search by name and city/area to automatically fetch Place ID, official direct review submission URL (`https://search.google.com/local/writereview?placeid=...`), business rating, address, and category without manual URL hunting.
 
 ---
 
 ## 1. Overview & Core Concept
 
-TapLocal evolves from a single-destination redirect tool into an omnichannel local business engagement suite:
-- **All-in-One Multi-Action Smart Hub**: A single physical QR standee or sticker can host multiple customer touchpoints simultaneously: Google Reviews, WhatsApp Order/Chat, Contact vCard, Digital Menu, Wi-Fi Instant Connect, Website, Facebook, and Google Maps Navigation.
-- **Batch Security Without Admin Exposure**: Multi-location chains, restaurants with floor captains, and event organizers can assign QR codes on the fly using a dedicated batch password without disclosing master admin credentials.
-- **Organic Review Intelligence**: Gemini 3.8 Flash crafts human, warm, and authentic Google review drafts based on custom business categories and selected service highlights, eliminating robotic AI phrasing.
-- **Universal Mobile Camera Scanner**: In-app QR scanning powered by pure JavaScript canvas pixel decoding (`jsqr`), eliminating browser incompatibilities and enabling reliable scanning on iOS Safari, Android Chrome, and desktop browsers alike.
-- **Zero-Loss Persistence**: Redundant synchronization across Cloud Firestore, local storage cache, and persistent server disk JSON so links, batches, and visual styles persist across updates and restarts.
+TapLocal connects dynamic physical QR hardware with digital destinations. To bridge the gap between digital setup and physical print production:
+1. **Live Google Maps Place Auto-Search**: Business owners or print agents can type a business name and location (e.g., "Grand Royal Cafe, Connaught Place"). The system auto-fills the verified Google Place ID, official direct review submission URL, rating, category, and street address.
+2. **Pre-Print Mockup Categorization**: In the dynamic links table and batch view, users can tag or batch-assign each QR code to its designated physical mockup:
+   - 🌟 **Google Review Standee** (Acrylic table stand / cash register plate)
+   - 🍽️ **Digital Menu Card** (Dining table tent / laminated card)
+   - 💬 **WhatsApp Help / Order Desk** (Customer service stand)
+   - 📸 **Instagram / Facebook Follow** (Wall sticker / counter tent)
+   - 🎛️ **Multi-Action Smart Hub** (All-in-one comprehensive table plate)
+3. **Bulk Print Shop Exporter**: Generates a single production-ready ZIP archive containing:
+   - Categorized subfolders per mockup type.
+   - High-resolution transparent PNGs (1024×1024) and lossless vector SVGs ready for direct drag-and-drop into mockup PSDs/AIs.
+   - A laser-cutting & print operator CSV manifest.
+   - An on-screen printable A4 Sheet / Grid Proofing view showing mockup labels alongside QR codes for quality checks before running print presses.
 
 ---
 
@@ -31,57 +38,64 @@ TapLocal evolves from a single-destination redirect tool into an omnichannel loc
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 1. Batch Creation & Password Setup                                          │
-│    Owner enters Name, Prefix, Custom Quantity (1-250), & Batch Password     │
+│ 1. Business Setup with Live Google Maps Search                              │
+│    Owner types "Spice Court Jaipur" -> Selects verified Google Place        │
+│    -> Auto-fills: Place ID, Direct Review URL, Category, Address, Rating   │
 └──────────────────────────────────────┬──────────────────────────────────────┘
                                        │
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 2. Physical QR Scan & Verification                                          │
-│    Staff scans unassigned QR -> Enters Batch Password -> Unlocks Assignment │
+│ 2. Pre-Print Mockup Assignment                                              │
+│    Owner assigns Target Mockup per QR or entire batch:                      │
+│    [x] Google Review Stand  [ ] Digital Menu  [ ] WhatsApp  [ ] Instagram   │
 └──────────────────────────────────────┬──────────────────────────────────────┘
                                        │
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 3. Multi-Action Selector                                                    │
-│    Staff checks desired options: [x] Google Review  [x] WhatsApp            │
-│                                  [x] Wi-Fi          [x] Digital Menu        │
-│                                  [x] Maps Location  [x] Contact vCard       │
+│ 3. Bulk Print Shop Export Modal                                             │
+│    - Select Batch or Custom Filter (by Mockup, Location, or Tag)            │
+│    - Choose Formats: Transparent High-Res PNG + SVG Vectors + Print CSV     │
+│    - Preview Mockup Production Sheet & Download Structured ZIP              │
 └──────────────────────────────────────┬──────────────────────────────────────┘
                                        │
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 4. Customer Experience: Multi-Action Smart Hub                              │
-│    Customer scans physical QR -> Interactive mobile page with action cards  │
-│    - "Leave a 5-Star Review" (Category-aware Gemini AI draft assistant)     │
-│    - "Chat on WhatsApp" (Direct wa.me link with prefilled order prompt)     │
-│    - "Connect to Guest Wi-Fi" (1-tap password copy & security info)         │
-│    - "Digital Menu" / "Save Contact to Phone" / "Get Directions"            │
+│ 4. Output ZIP File Structure for Graphic Designers & Print Shops            │
+│    ├── manifest_print_shop.csv                                              │
+│    ├── 📁 Google_Reviews/                                                   │
+│    │    ├── Table-01_[GoogleReviews]_stock-01.png                           │
+│    │    └── Table-01_[GoogleReviews]_stock-01.svg                           │
+│    ├── 📁 Digital_Menu/                                                     │
+│    │    └── Table-02_[DigitalMenu]_stock-02.png                             │
+│    ├── 📁 WhatsApp_Placard/                                                 │
+│    ├── 📁 Social_Media_Cards/                                               │
+│    └── print_proofing_sheet.html (Standalone visual proofing preview)       │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Visual Identity & Theme
-- **Theme**: Utilitarian, tactile, and high-density SaaS dark aesthetic (`bg-neutral-950` canvas, `bg-neutral-900` card surfaces, `border-neutral-800` subtle elevation dividers).
-- **Zero-Pill Discipline**: Metadata displayed as quiet, unboxed text separated by typographic middots (`·`). Interactive elements styled as segmented controls and buttons.
-- **Typography**: Plus Jakarta Sans for geometric brand clarity, with JetBrains Mono / tabular numbers (`font-mono`) for batch codes, slugs, Wi-Fi credentials, and analytics metrics.
-- **Mobile Responsive Designer Studio**: Visual QR Designer modal redesigned with mobile-first stacked controls, scrollable accordion sections, floating live sticky QR preview at the bottom/top, and 48px touch targets for color pickers, frame styles, and gradient sliders.
+- **Theme**: SaaS utilitarian dark interface (`bg-neutral-950` canvas, `bg-neutral-900` card surfaces, `border-neutral-800` subtle elevation dividers).
+- **Mockup Badge Colors**: Distinctive, low-saturation category accents for quick visual identification:
+  - Google Reviews: Amber/Gold accent (`text-amber-400 bg-amber-950/40 border-amber-800/50`)
+  - Digital Menu: Emerald/Green accent (`text-emerald-400 bg-emerald-950/40 border-emerald-800/50`)
+  - WhatsApp: Teal/Green accent (`text-teal-400 bg-teal-950/40 border-teal-800/50`)
+  - Instagram & Facebook: Violet/Sky accent (`text-indigo-400 bg-indigo-950/40 border-indigo-800/50`)
+  - Smart Hub: Purple accent (`text-purple-400 bg-purple-950/40 border-purple-800/50`)
+- **Typography**: Plus Jakarta Sans for UI controls, JetBrains Mono / tabular numbers (`font-mono`) for slugs, filenames, coordinates, and batch counters.
 
 ---
 
 ## 3. Key Product Decisions & Trade-Offs
 
-- **Multi-Action Hub Architecture**:
-  - *Chosen Approach*: When 2 or more actions are configured for a link, TapLocal automatically renders an interactive Smart Hub landing page. If only 1 action is configured, it directly performs that action (or renders the dedicated Wi-Fi / vCard / Review card).
-  - *Why*: Eliminates customer friction when only a single destination is intended, while giving full multi-channel flexibility when businesses want an all-in-one table standee.
-- **Batch Password Enforcement**:
-  - *Chosen Approach*: Each batch record stores an optional `batchPassword`. When scanning an unassigned link belonging to that batch, the activation screen requests the batch password.
-  - *Why*: Enables safe delegation to store employees, waiters, or field technicians without sharing the owner's master administrative login.
-- **Organic AI Review Generation**:
-  - *Chosen Approach*: Prompt Gemini 3.8 Flash with specific instructions to avoid overly polished, generic corporate marketing copy. Generate 3 short, colloquial, and natural reviews reflecting the exact business category and chosen highlights.
-  - *Why*: Customers immediately recognize generic AI text; organic drafts sound like genuine human reviews and have a much higher conversion rate on Google Maps.
-- **Universal JS QR Decoder**:
-  - *Chosen Approach*: Integrate `jsqr` alongside native canvas frame grabbing, running at 30fps with automatic brightness/contrast normalization.
-  - *Why*: Browser-native `BarcodeDetector` fails on iOS Safari and older Android browsers; `jsqr` works universally without native dependencies.
+- **Hierarchical Mockup ZIP Structure**:
+  - *Chosen Approach*: Group exported QR assets into subfolders matching mockup types (`/Google_Reviews/`, `/Digital_Menu/`, etc.) with transparent backgrounds and clear descriptive filenames (e.g. `Stand-01_GoogleReview_slug.png`).
+  - *Why*: Solves the user's primary bottleneck: placing different QRs into different graphic templates in Photoshop/Illustrator without mixing up destinations or table numbers.
+- **Client-Side ZIP Generation (`jszip`)**:
+  - *Chosen Approach*: Generate the ZIP and high-res canvas exports directly in the browser using `jszip` and pure SVG/Canvas rasterizers.
+  - *Why*: Instant download with zero server latency, works completely offline, and handles batches of hundreds of QR codes without memory spikes on the backend.
+- **Hybrid Google Maps Search**:
+  - *Chosen Approach*: Provide a server proxy endpoint (`/api/places/search`) utilizing Google Places API / Maps integration to return structured place metadata (Place ID, official name, address, rating, and direct review URL `https://search.google.com/local/writereview?placeid={place_id}`).
+  - *Why*: Prevents CORS issues on client-side requests, keeps API keys secure, and guarantees users get genuine verified Place IDs.
 
 ---
 
@@ -89,65 +103,69 @@ TapLocal evolves from a single-destination redirect tool into an omnichannel loc
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                             TAPLOCAL SYSTEM CORE                            │
+│                           TAPLOCAL EXPORT & SEARCH ENGINE                   │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│   [ Client Browser ]                 [ Express / Vite Dev Server ]         │
-│   - React 19 UI                      - Port 3000                           │
-│   - Pure JS jsqr Camera Scanner      - Dynamic Redirects (/r/:slug)         │
-│   - Multi-Action Smart Hub           - vCard Download (/api/vcard/:slug)    │
-│   - Visual QR Studio (Mobile-Ready)  - Gemini 3.8 Flash AI Review Endpoint │
-│                                      - Local Disk Persistence (redirects)   │
-│                                                     │                       │
-│                                                     ▼                       │
-│                                         [ Cloud Firestore DB ]              │
-│                                         - links collection                  │
-│                                         - batches collection                │
-│                                         - Multi-device real-time sync       │
+│   [ Client Browser ]                                                        │
+│   ├── LinksTable & BatchFolders (Mockup Type Selector & Batch Tagging)      │
+│   ├── EditDestinationModal & CreateLinkModal (Google Maps Place Search)     │
+│   └── BulkPrintShopModal (Export Configurator)                              │
+│       ├── JSZip Archiver (Builds multi-folder ZIP archive)                  │
+│       ├── Canvas/SVG Renderer (Generates transparent 1000px PNGs & SVGs)    │
+│       └── CSV Exporter (Builds laser-cut & print shop manifest)             │
+│                                      │                                      │
+│                                      ▼                                      │
+│   [ Express Server (server.ts) ]                                            │
+│   ├── GET /api/places/search?query=... (Google Maps Place Auto-Search)      │
+│   └── POST /api/ai/generate-review (Multilingual Gemini 3.8 Flash Reviews)  │
+│                                      │                                      │
+│                                      ▼                                      │
+│   [ Persistence Layer (localDb.ts & firestoreDb.ts) ]                       │
+│   └── LinkRecord.targetMockup: 'google_review' | 'menu' | 'whatsapp' |      │
+│                               'facebook' | 'instagram' | 'smart_hub'        │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Data Models & State Contracts
+### Data Model Enhancements
 
-#### 1. Multi-Action Hub Structure (`hubActions`)
 ```ts
-export interface HubActionItem {
-  id: string;
-  type: 'google_review' | 'whatsapp' | 'menu' | 'wifi' | 'contact' | 'website' | 'facebook' | 'location';
+export type MockupCategory = 
+  | 'google_review'      // Physical acrylic review standee / sticker
+  | 'digital_menu'       // Table tent / laminated food & drink card
+  | 'whatsapp_order'     // Help desk / order inquiry card
+  | 'instagram_follow'   // Social media sticker
+  | 'facebook_community' // Social media stand
+  | 'smart_hub'          // All-in-one multi-action plate
+  | 'custom';            // General purpose
+
+export interface LinkRecord {
+  // Existing fields
+  slug: string;
+  destinationUrl: string;
   title: string;
-  subtitle?: string;
-  enabled: boolean;
-  destinationUrl?: string;
-  wifiData?: WifiData;
-  vcardData?: VCardData;
+  batchId?: string;
+  tags?: string[];
+  
+  // New print & mockup fields
+  targetMockup?: MockupCategory;
+  standNumber?: string; // e.g. "Table 01", "Counter A", "Stand #4"
+  placeId?: string;
+  placeAddress?: string;
+  placeRating?: number;
 }
 ```
 
-#### 2. Enhanced `BatchRecord` with Security
-```ts
-export interface BatchRecord {
-  id: string;
-  name: string;
-  prefix: string;
-  count: number;
-  batchPassword?: string;
-  ownerId: string;
-  createdAt: string;
-}
-```
-
-#### 3. Category-Tailored AI Review Prompt Contract
-- Route: `POST /api/ai/generate-review`
-- Model: `gemini-3.8-flash` via `@google/genai`
-- Input: `businessCategory`, `businessName`, `praiseTags`, `customNotes`
-- Output: 3 distinct, authentic, organic Google review drafts varying in length and style.
-
-### Execution Plan Phases
-1. **Model & State Updates**: Update data types to support `batchPassword`, `hubActions`, and clean category configurations.
-2. **Feature Removal**: Remove conditional routing, eye pattern selectors, and the 1-3 star negative intercept mechanism.
-3. **In-App Camera Fix**: Implement pure JS `jsqr` canvas decoding in `CameraQRScannerModal.tsx`.
-4. **Visual QR Studio Mobile Polish**: Refactor `QRStudioModal.tsx` for fluid mobile screens.
-5. **Multi-Action Hub Implementation**: Build the Multi-Action Hub builder in assignment views and customer-facing responsive landing interface.
-6. **Organic Review Engine**: Upgrade Gemini 3.8 Flash prompts for organic, category-tailored reviews.
-7. **Verification**: Run `compile_applet` and verify end-to-end functionality.
+### Execution Phases Upon Approval
+1. **Package Installation**: Install `jszip` and `@types/jszip` via `install_applet_package`.
+2. **Server Search Endpoint**: Add `/api/places/search` in `server.ts` to power the live Google Maps Place auto-search.
+3. **Data Model & Mockup Assignment UI**:
+   - Add `targetMockup` and `standNumber` support to `types.ts`, `localDb.ts`, and `firestoreDb.ts`.
+   - Add Mockup Selector chip control into `LinksTable.tsx`, `CreateLinkModal.tsx`, and `EditDestinationModal.tsx`.
+4. **Google Maps Place Search Component**:
+   - Embed search input with instant autocomplete results in `EditDestinationModal.tsx` and `CreateLinkModal.tsx`.
+   - Auto-fill business title, Google Place ID, and official review URL upon place selection.
+5. **Bulk Print Shop Export Modal**:
+   - Create `BulkPrintShopModal.tsx` with batch selection, mockup folder previews, format toggles (PNG, SVG, CSV, Proof Sheet), and 1-click ZIP generation.
+   - Generate production-ready CSV manifest for print shops and laser engravers.
+6. **Verification**: Run `compile_applet` and test end-to-end export and search flows.

@@ -296,23 +296,36 @@ export const api = {
 
   async updateLink(
     id: string,
-    payload: {
-      destinationUrl?: string;
-      title?: string;
-      description?: string;
-      isActive?: boolean;
-      tags?: string[];
-      qrSettings?: any;
-    }
+    payload: any
   ): Promise<{ success: boolean; message: string; link: LinkRecord }> {
+    let updated: LinkRecord | null = null;
     try {
-      const updated = await firestoreDb.updateLink(id, payload);
-      await localDb.updateLink(id, payload).catch(() => {});
-      return { success: true, message: 'Link updated successfully', link: updated };
+      updated = await firestoreDb.updateLink(id, payload);
     } catch (e) {
       console.warn('Firestore updateLink fallback:', e);
     }
-    return localDb.updateLink(id, payload);
+
+    try {
+      const localRes = await localDb.updateLink(id, payload);
+      if (!updated && localRes?.link) {
+        updated = localRes.link;
+      }
+    } catch {}
+
+    // Also sync to Express backend database
+    try {
+      const res = await fetch(`/api/links/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await parseJsonResponse(res);
+      if (!updated && data?.link) {
+        updated = data.link;
+      }
+    } catch {}
+
+    return { success: true, message: 'Link updated successfully', link: updated || (payload as LinkRecord) };
   },
 
   /**

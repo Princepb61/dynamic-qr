@@ -5,6 +5,7 @@ import {
   QRSettings,
   HubActionItem,
   MultiActionHubConfig,
+  MockupCategory,
 } from '../types';
 import {
   X,
@@ -31,6 +32,8 @@ import {
 } from 'lucide-react';
 import { QRStudioModal } from './QRStudioModal';
 import { getPraiseTagsForCategory } from '../utils/categoryTags';
+import { GooglePlaceSearchInput, PlaceResult } from './GooglePlaceSearchInput';
+import { MOCKUP_LABELS } from '../utils/bulkExportHelper';
 
 interface EditDestinationModalProps {
   link: LinkRecord | null;
@@ -201,6 +204,13 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
     'instant_redirect' | 'button_page' | 'review_gate' | 'multi_action_hub' | 'vcard_profile' | 'wifi_card'
   >('instant_redirect');
 
+  // Pre-print Mockup & Stand attributes
+  const [targetMockup, setTargetMockup] = useState<MockupCategory>('google_review');
+  const [standNumber, setStandNumber] = useState('');
+  const [placeId, setPlaceId] = useState('');
+  const [placeAddress, setPlaceAddress] = useState('');
+  const [placeRating, setPlaceRating] = useState<number | undefined>(undefined);
+
   // Multi-Action Smart Hub state
   const [hubEnabled, setHubEnabled] = useState(false);
   const [hubHeading, setHubHeading] = useState('');
@@ -232,6 +242,11 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
             ? 'review_gate'
             : 'instant_redirect')
       );
+      setTargetMockup(link.targetMockup || 'google_review');
+      setStandNumber(link.standNumber || (link.batchIndex !== undefined ? `Stand-${String(link.batchIndex + 1).padStart(2, '0')}` : ''));
+      setPlaceId(link.placeId || '');
+      setPlaceAddress(link.placeAddress || '');
+      setPlaceRating(link.placeRating);
 
       // Multi-Action Hub setup
       if (link.hubConfig && Array.isArray(link.hubConfig.actions) && link.hubConfig.actions.length > 0) {
@@ -401,6 +416,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
     }
 
     const isHubActive = presentationMode === 'multi_action_hub';
+    const isSingleReviewGate = presentationMode === 'review_gate';
 
     if (isHubActive && !target) {
       target = `/r/${link.slug}`;
@@ -418,8 +434,11 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
     const isAiReviewsEnabled =
       reviewAct ? reviewAct.enabled !== false && reviewAct.enableAiReviews !== false : false;
 
+    // Review gate is enabled only if standalone review_gate mode or hub action has it active
+    const isReviewGateEnabled = isSingleReviewGate || (isHubActive && isAiReviewsEnabled);
+
     const reviewGateConfig: ReviewGateConfig = {
-      enabled: isAiReviewsEnabled,
+      enabled: isReviewGateEnabled,
       businessName: (reviewAct?.businessName || title || link.title || '').trim(),
       businessCategory: (reviewAct?.businessCategory || 'Local Business').trim(),
       googleReviewUrl: (reviewAct?.destinationUrl || target || '').trim(),
@@ -438,7 +457,14 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
       actions: hubActions,
     };
 
-    const effectivePresentationMode = isHubActive ? 'multi_action_hub' : 'instant_redirect';
+    let effectivePresentationMode: 'instant_redirect' | 'button_page' | 'review_gate' | 'multi_action_hub' | 'vcard_profile' | 'wifi_card' = 'instant_redirect';
+    if (isHubActive) {
+      effectivePresentationMode = 'multi_action_hub';
+    } else if (isSingleReviewGate) {
+      effectivePresentationMode = 'review_gate';
+    } else {
+      effectivePresentationMode = 'instant_redirect';
+    }
 
     try {
       setIsSaving(true);
@@ -456,6 +482,11 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
           password: wifiAct.wifiPassword || '',
           encryption: 'WPA',
         } : link.wifiData,
+        targetMockup,
+        standNumber: standNumber.trim() || undefined,
+        placeId: placeId.trim() || undefined,
+        placeAddress: placeAddress.trim() || undefined,
+        placeRating,
       });
       onClose();
     } catch (err: any) {
@@ -639,6 +670,73 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                       placeholder="Staff activation password"
                       className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
                     />
+                  </div>
+                </div>
+
+                {/* Physical Mockup Graphic Template & Stand Number */}
+                <div className="p-4 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <span>🖼️ Physical Mockup Graphic Template</span>
+                        <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono">PRINT READY</span>
+                      </span>
+                      <p className="text-[11px] text-neutral-400">
+                        Assign this QR code to the physical graphic mockup template you place it on before printing.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {Object.entries(MOCKUP_LABELS).map(([key, meta]) => {
+                      const isSelected = targetMockup === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setTargetMockup(key as MockupCategory)}
+                          className={`p-2.5 rounded-xl border text-left transition-all flex items-center gap-2 ${
+                            isSelected
+                              ? 'bg-amber-500/15 border-amber-500/60 text-white shadow-sm ring-1 ring-amber-500/30'
+                              : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-neutral-200 hover:border-neutral-700'
+                          }`}
+                        >
+                          <span className="text-base shrink-0">{meta.icon}</span>
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold block truncate">{meta.label}</span>
+                            <span className="text-[10px] text-neutral-500 block font-mono truncate">/{meta.folder}/</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-neutral-300 block">
+                        Stand / Table Number Label
+                      </label>
+                      <input
+                        type="text"
+                        value={standNumber}
+                        onChange={(e) => setStandNumber(e.target.value)}
+                        placeholder="e.g. Table 01, VIP Stand #3, Counter B"
+                        className="w-full bg-neutral-900 border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                    {placeId ? (
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-neutral-300 block">
+                          Verified Google Place ID
+                        </label>
+                        <input
+                          type="text"
+                          value={placeId}
+                          readOnly
+                          className="w-full bg-neutral-900/60 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-amber-400 font-mono"
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -959,6 +1057,38 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                                       activeColor="amber"
                                       onText="AI ON"
                                       offText="AI OFF"
+                                    />
+                                  </div>
+
+                                   {/* Live Google Maps Auto-Search */}
+                                  <div className="space-y-1.5 p-3 rounded-xl bg-neutral-900/80 border border-amber-500/30">
+                                    <div className="flex items-center justify-between">
+                                      <label className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
+                                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                        <span>Auto-Fetch Business via Google Maps Search</span>
+                                      </label>
+                                      <span className="text-[10px] text-neutral-400">Search city &amp; name</span>
+                                    </div>
+                                    <GooglePlaceSearchInput
+                                      initialQuery={action.businessName || ''}
+                                      placeholder="Type business name &amp; city (e.g. Copper Kettle Cafe Mumbai)..."
+                                      onSelectPlace={(place) => {
+                                        handleUpdateHubAction(action.id, {
+                                          destinationUrl: place.googleReviewUrl,
+                                          businessName: place.name,
+                                          businessCategory: place.category || 'Local Business',
+                                          googlePlaceId: place.placeId,
+                                          praiseTags: place.suggestedTags && place.suggestedTags.length > 0
+                                            ? place.suggestedTags
+                                            : getPraiseTagsForCategory(place.category || 'Local Business'),
+                                        });
+                                        setPlaceId(place.placeId);
+                                        setPlaceAddress(place.formattedAddress);
+                                        setPlaceRating(place.rating);
+                                        if (!title || title.startsWith('QR Code') || title.startsWith('Pre-Printed')) {
+                                          setTitle(`${place.name} - Review Stand`);
+                                        }
+                                      }}
                                     />
                                   </div>
 

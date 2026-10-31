@@ -1469,6 +1469,73 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
             })}
           </div>
 
+          {/* Interactive Modal for Multi-Action Hub actions (AI Review or Wi-Fi) */}
+          {hubActiveModal && hubActiveModal.type === 'google_review' && (
+            <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md flex items-center justify-center p-3">
+              <div className="w-full max-w-lg">
+                <ReviewGatekeeperView
+                  businessName={hubActiveModal.businessName || hub.heading || link.title}
+                  businessCategory={hubActiveModal.businessCategory || 'Local Business'}
+                  config={{
+                    enabled: true,
+                    googleReviewUrl:
+                      hubActiveModal.destinationUrl ||
+                      (hubActiveModal.googlePlaceId
+                        ? `https://search.google.com/local/writereview?placeid=${encodeURIComponent(hubActiveModal.googlePlaceId)}`
+                        : link.destinationUrl || 'https://search.google.com/local/writereview'),
+                    minRatingForGoogle: 4,
+                    praiseTags: hubActiveModal.praiseTags || [],
+                  }}
+                  slug={cleanSlug}
+                  onClose={() => setHubActiveModal(null)}
+                />
+              </div>
+            </div>
+          )}
+
+          {hubActiveModal && hubActiveModal.type === 'wifi' && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+              <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 mx-auto">
+                  <Wifi className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Connect to Guest Wi-Fi</h3>
+                  <p className="text-xs text-neutral-400 mt-0.5">Use credentials below to connect</p>
+                </div>
+                <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 text-left space-y-2.5">
+                  <div>
+                    <span className="text-[10px] uppercase font-mono text-neutral-500 block">Network (SSID)</span>
+                    <span className="text-sm font-bold text-white font-mono">{hubActiveModal.wifiSsid || link.wifiData?.ssid || 'Guest Wi-Fi'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-mono text-neutral-500 block">Password</span>
+                    <span className="text-sm font-bold text-cyan-400 font-mono">{hubActiveModal.wifiPassword || link.wifiData?.password || '(No password)'}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const pass = hubActiveModal.wifiPassword || link.wifiData?.password || '';
+                    if (pass) navigator.clipboard.writeText(pass);
+                    setCopiedWifiPass(true);
+                    setTimeout(() => setCopiedWifiPass(false), 2000);
+                  }}
+                  className="w-full py-2.5 px-4 text-xs font-bold text-neutral-950 bg-cyan-400 hover:bg-cyan-300 rounded-xl transition-all shadow-md active:scale-98"
+                >
+                  {copiedWifiPass ? 'Password Copied!' : 'Copy Wi-Fi Password'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHubActiveModal(null)}
+                  className="w-full py-2 text-xs text-neutral-400 hover:text-white transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="text-center text-[11px] text-neutral-600 font-mono">
             /r/{cleanSlug} · TAPLOCAL.IN
           </div>

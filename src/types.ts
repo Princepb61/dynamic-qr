@@ -6,6 +6,15 @@ export type LabelPresetType =
   | 'thermal_3in'
   | 'shelf_tag';
 
+export type MockupCategory =
+  | 'google_review'      // Physical acrylic review standee / sticker
+  | 'digital_menu'       // Table tent / laminated food & drink card
+  | 'whatsapp_order'     // Help desk / order inquiry card
+  | 'instagram_follow'   // Social media sticker
+  | 'facebook_community' // Social media stand
+  | 'smart_hub'          // All-in-one multi-action plate
+  | 'custom';            // General purpose
+
 export interface BatchRecord {
   id: string;
   name: string;
@@ -15,6 +24,7 @@ export interface BatchRecord {
   ownerId: string;
   ownerEmail?: string;
   batchPassword?: string; // Optional password for staff self-assignment without login
+  defaultMockup?: MockupCategory; // Pre-assigned mockup target for this batch
   createdAt: string;
   unassignedCount?: number;
   slugs?: string[];
@@ -206,6 +216,11 @@ export interface LinkRecord {
   vcardData?: VCardData;
   wifiData?: WifiData;
   hubConfig?: MultiActionHubConfig;
+  targetMockup?: MockupCategory;
+  standNumber?: string;
+  placeId?: string;
+  placeAddress?: string;
+  placeRating?: number;
 }
 
 export interface ClickRecord {

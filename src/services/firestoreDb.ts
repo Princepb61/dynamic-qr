@@ -16,6 +16,7 @@ import { LinkRecord, ClickRecord, BatchRecord, LabelPresetType } from '../types'
 const LINKS_COLLECTION = 'links';
 const CLICKS_COLLECTION = 'clicks';
 const DELETED_LINKS_COLLECTION = 'deleted_links';
+const BATCHES_COLLECTION = 'batches';
 
 /**
  * Sanitizes data before sending to Firestore by stripping all undefined properties.
@@ -48,6 +49,20 @@ export const firestoreDb = {
     try {
       const snap = await getDocs(collection(db, DELETED_LINKS_COLLECTION));
       const deletedSet = new Set<string>();
+      
+      // Permanently block initial sample links from ever reappearing
+      const PURGED_SAMPLE_SLUGS = [
+        'summer-promo',
+        'stock-table-01',
+        'stock-table-02',
+        'menu-main',
+        'stock-sticker-101',
+        'vip-menu',
+        'user-guide',
+        'survey-feedback',
+      ];
+      PURGED_SAMPLE_SLUGS.forEach((s) => deletedSet.add(s));
+
       snap.forEach((d) => {
         deletedSet.add(d.id.toLowerCase());
         const data = d.data();
@@ -57,7 +72,16 @@ export const firestoreDb = {
       return deletedSet;
     } catch (err) {
       console.warn('Firestore getDeletedSlugs error:', err);
-      return new Set();
+      return new Set([
+        'summer-promo',
+        'stock-table-01',
+        'stock-table-02',
+        'menu-main',
+        'stock-sticker-101',
+        'vip-menu',
+        'user-guide',
+        'survey-feedback',
+      ]);
     }
   },
 

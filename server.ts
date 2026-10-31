@@ -119,6 +119,11 @@ export interface LinkRecord {
     encryption?: 'WPA' | 'WEP' | 'nopass';
     hidden?: boolean;
   };
+  targetMockup?: string;
+  standNumber?: string;
+  placeId?: string;
+  placeAddress?: string;
+  placeRating?: number;
 }
 
 export interface ReviewFeedbackRecord {
@@ -206,207 +211,19 @@ function getDefaultUsers(): UserRecord[] {
   ];
 }
 
+const PURGED_SLUGS = new Set([
+  'summer-promo',
+  'stock-table-01',
+  'stock-table-02',
+  'menu-main',
+  'stock-sticker-101',
+  'vip-menu',
+  'user-guide',
+  'survey-feedback',
+]);
+
 function getInitialData(): DatabaseSchema {
-  const now = new Date();
-  const daysAgo = (days: number, hoursOffset: number = 0) => {
-    const d = new Date(now.getTime() - days * 86400000 - hoursOffset * 3600000);
-    return d.toISOString();
-  };
-
-  const initialLinks: LinkRecord[] = [
-    {
-      id: 'link_1',
-      slug: 'summer-promo',
-      title: 'Summer Seasonal Campaign Flyer',
-      destinationUrl: 'https://en.wikipedia.org/wiki/Summer',
-      description: 'Printed on outdoor banners and promotional flyers across retail stores',
-      isActive: true,
-      createdAt: daysAgo(12),
-      updatedAt: daysAgo(1),
-      tags: ['Marketing', 'Print', 'Flyer'],
-      totalClicks: 184,
-      ownerId: 'usr_admin_1',
-      ownerEmail: 'p0667500@gmail.com',
-      ownerName: 'System Administrator',
-      qrSettings: {
-        colorDark: '#0f172a',
-        colorLight: '#ffffff',
-        errorCorrectionLevel: 'H',
-        margin: 2,
-      },
-    },
-    {
-      id: 'link_2',
-      slug: 'user-guide',
-      title: 'Smart Sensor v2 Digital Documentation',
-      destinationUrl: 'https://developer.mozilla.org',
-      description: 'Quick-start QR code on physical product packaging and box sleeve',
-      isActive: true,
-      createdAt: daysAgo(20),
-      updatedAt: daysAgo(3),
-      tags: ['Hardware', 'Packaging', 'Docs'],
-      totalClicks: 326,
-      ownerId: 'usr_client_sarah',
-      ownerEmail: 'client@company.com',
-      ownerName: 'Sarah Jenkins',
-      qrSettings: {
-        colorDark: '#1e3a8a',
-        colorLight: '#ffffff',
-        errorCorrectionLevel: 'Q',
-        margin: 2,
-      },
-    },
-    {
-      id: 'link_3',
-      slug: 'vip-menu',
-      title: 'Executive Summit Digital Food & Wine Menu',
-      destinationUrl: 'https://archive.org',
-      description: 'Table tent acrylic stand QR codes in the grand banquet hall',
-      isActive: true,
-      createdAt: daysAgo(5),
-      updatedAt: daysAgo(2),
-      tags: ['Event', 'Hospitality'],
-      totalClicks: 94,
-      ownerId: 'usr_admin_1',
-      ownerEmail: 'p0667500@gmail.com',
-      ownerName: 'System Administrator',
-      qrSettings: {
-        colorDark: '#064e3b',
-        colorLight: '#ffffff',
-        errorCorrectionLevel: 'H',
-        margin: 2,
-      },
-    },
-    {
-      id: 'link_4',
-      slug: 'survey-feedback',
-      title: 'Customer Experience Instant Feedback',
-      destinationUrl: 'https://news.ycombinator.com',
-      description: 'Printed at the bottom of register receipts for quarterly CSAT review',
-      isActive: true,
-      createdAt: daysAgo(18),
-      updatedAt: daysAgo(4),
-      tags: ['CSAT', 'Receipts'],
-      totalClicks: 112,
-      ownerId: 'usr_client_sarah',
-      ownerEmail: 'client@company.com',
-      ownerName: 'Sarah Jenkins',
-      qrSettings: {
-        colorDark: '#312e81',
-        colorLight: '#ffffff',
-        errorCorrectionLevel: 'M',
-        margin: 2,
-      },
-    },
-    {
-      id: 'link_pre_1',
-      slug: 'stock-table-01',
-      title: 'Pre-Printed Acrylic Stand #01',
-      destinationUrl: '',
-      description: 'Pre-printed acrylic stand on dining table 1, waiting for campaign menu link',
-      isActive: true,
-      isAssigned: false,
-      batchId: 'batch_seed_1',
-      batchName: 'Dining Table Stands',
-      batchIndex: 1,
-      createdAt: daysAgo(2),
-      updatedAt: daysAgo(2),
-      tags: ['Pre-Printed', 'Dining Tables'],
-      totalClicks: 0,
-      ownerId: 'usr_admin_1',
-      ownerEmail: 'p0667500@gmail.com',
-      ownerName: 'System Administrator',
-      qrSettings: {
-        colorDark: '#0f172a',
-        colorLight: '#ffffff',
-        errorCorrectionLevel: 'H',
-        margin: 2,
-      },
-    },
-    {
-      id: 'link_pre_2',
-      slug: 'stock-table-02',
-      title: 'Pre-Printed Acrylic Stand #02',
-      destinationUrl: '',
-      description: 'Pre-printed acrylic stand on dining table 2, waiting for campaign menu link',
-      isActive: true,
-      isAssigned: false,
-      batchId: 'batch_seed_1',
-      batchName: 'Dining Table Stands',
-      batchIndex: 2,
-      createdAt: daysAgo(2),
-      updatedAt: daysAgo(2),
-      tags: ['Pre-Printed', 'Dining Tables'],
-      totalClicks: 0,
-      ownerId: 'usr_admin_1',
-      ownerEmail: 'p0667500@gmail.com',
-      ownerName: 'System Administrator',
-      qrSettings: {
-        colorDark: '#0f172a',
-        colorLight: '#ffffff',
-        errorCorrectionLevel: 'H',
-        margin: 2,
-      },
-    },
-    {
-      id: 'link_pre_3',
-      slug: 'stock-sticker-101',
-      title: 'Pre-Printed Box Sticker #101',
-      destinationUrl: '',
-      description: 'Adhesive packaging sticker in warehouse stock',
-      isActive: true,
-      isAssigned: false,
-      batchId: 'batch_seed_2',
-      batchName: 'Warehouse Stickers',
-      batchIndex: 1,
-      createdAt: daysAgo(3),
-      updatedAt: daysAgo(3),
-      tags: ['Pre-Printed', 'Packaging'],
-      totalClicks: 0,
-      ownerId: 'usr_admin_1',
-      ownerEmail: 'p0667500@gmail.com',
-      ownerName: 'System Administrator',
-      qrSettings: {
-        colorDark: '#1e3a8a',
-        colorLight: '#ffffff',
-        errorCorrectionLevel: 'H',
-        margin: 2,
-      },
-    },
-  ];
-
-  const clickSamples: ClickRecord[] = [];
-  const devices: Array<'mobile' | 'desktop' | 'tablet'> = ['mobile', 'mobile', 'mobile', 'desktop', 'tablet'];
-  const browsers = ['Mobile Safari', 'Chrome Mobile', 'Safari', 'Chrome', 'Firefox', 'Samsung Internet'];
-  const osList = ['iOS 18.1', 'iOS 17.5', 'Android 15', 'Android 14', 'macOS 15.1', 'Windows 11'];
-  const countries = ['United States', 'Germany', 'United Kingdom', 'Japan', 'France', 'Canada', 'Singapore'];
-
-  initialLinks.forEach((l) => {
-    for (let i = 0; i < Math.min(l.totalClicks, 35); i++) {
-      const dayOffset = Math.floor(Math.random() * 7);
-      const hourOffset = Math.floor(Math.random() * 24);
-      const dev = devices[Math.floor(Math.random() * devices.length)];
-      const browser = browsers[Math.floor(Math.random() * browsers.length)];
-      const os = osList[Math.floor(Math.random() * osList.length)];
-      const country = countries[Math.floor(Math.random() * countries.length)];
-
-      clickSamples.push({
-        id: `click_${l.id}_${i}`,
-        linkId: l.id,
-        slug: l.slug,
-        timestamp: daysAgo(dayOffset, hourOffset),
-        referrer: Math.random() > 0.4 ? 'Camera QR Scan' : 'Direct / App Scanner',
-        deviceType: dev,
-        browser,
-        os,
-        ip: `192.168.${Math.floor(Math.random() * 254)}.${Math.floor(Math.random() * 254)}`,
-        country,
-        userAgent: `Mozilla/5.0 (${dev}; ${os}) AppleWebKit/537.36`,
-      });
-    }
-  });
-
-  return { users: getDefaultUsers(), links: initialLinks, clicks: clickSamples, feedback: [] };
+  return { users: getDefaultUsers(), links: [], clicks: [], feedback: [] };
 }
 
 function loadDatabase(): DatabaseSchema {
@@ -441,12 +258,16 @@ function loadDatabase(): DatabaseSchema {
         adminUser.status = 'approved';
       }
 
-      // Ensure links array exists
+      // Ensure links array exists and filter out permanently purged sample links
       if (!data.links || !Array.isArray(data.links)) {
         data.links = [];
+      } else {
+        data.links = data.links.filter((l: LinkRecord) => l && l.slug && !PURGED_SLUGS.has(l.slug.toLowerCase()));
       }
       if (!data.clicks || !Array.isArray(data.clicks)) {
         data.clicks = [];
+      } else {
+        data.clicks = data.clicks.filter((c: ClickRecord) => c && c.slug && !PURGED_SLUGS.has(c.slug.toLowerCase()));
       }
       if (!data.feedback || !Array.isArray(data.feedback)) {
         data.feedback = [];
@@ -492,33 +313,14 @@ async function startServer() {
   // -------------------------------------------------------------
   // DYNAMIC REDIRECT ENGINE (/r/:slug)
   // -------------------------------------------------------------
-  app.get('/r/:slug', (req: Request, res: Response) => {
+  app.get('/r/:slug', (req: Request, res: Response, next) => {
     const { slug } = req.params;
     const db = loadDatabase();
     const link = db.links.find((l) => l.slug.toLowerCase() === slug.toLowerCase());
 
     if (!link) {
-      return res.status(404).send(`
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>404 - Link Not Found</title>
-          <script src="https://cdn.tailwindcss.com"></script>
-        </head>
-        <body class="bg-neutral-900 text-neutral-100 flex items-center justify-center min-h-screen p-6 font-sans">
-          <div class="max-w-md w-full bg-neutral-800 border border-neutral-700 rounded-2xl p-8 text-center shadow-2xl">
-            <div class="w-16 h-16 bg-neutral-700/60 rounded-full flex items-center justify-center mx-auto mb-4 text-neutral-400">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            </div>
-            <h1 class="text-xl font-bold mb-2">Dynamic Link Not Found</h1>
-            <p class="text-neutral-400 text-sm mb-6">The requested short link <code class="bg-neutral-900 px-2 py-1 rounded text-neutral-300 font-mono">/r/${escapeHtml(slug)}</code> does not exist or may have been removed.</p>
-            <a href="/" class="inline-block bg-neutral-100 text-neutral-900 font-semibold px-5 py-2.5 rounded-lg text-sm hover:bg-white transition-colors">Return to Dashboard</a>
-          </div>
-        </body>
-        </html>
-      `);
+      // Pass through to Vite client application so ClientRedirectHandler checks Cloud Firestore directly!
+      return next();
     }
 
     if (!link.isActive) {
@@ -985,6 +787,34 @@ async function startServer() {
                 <button type="button" onclick="closeReviewModal()" class="text-neutral-400 hover:text-white p-1 text-lg leading-none">&times;</button>
               </div>
 
+              <!-- Language Selection -->
+              <div>
+                <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Language</label>
+                <div class="grid grid-cols-4 gap-1 p-1 bg-neutral-950 rounded-xl border border-neutral-800 text-xs text-center" id="hubLangBar">
+                  <button type="button" onclick="setHubLang(this, 'all')" class="py-1 px-2 rounded-lg font-bold bg-amber-400 text-neutral-950 shadow-xs">All</button>
+                  <button type="button" onclick="setHubLang(this, 'en')" class="py-1 px-2 rounded-lg font-bold text-neutral-400 hover:text-white">English</button>
+                  <button type="button" onclick="setHubLang(this, 'hi')" class="py-1 px-2 rounded-lg font-bold text-neutral-400 hover:text-white">हिन्दी</button>
+                  <button type="button" onclick="setHubLang(this, 'pa')" class="py-1 px-2 rounded-lg font-bold text-neutral-400 hover:text-white">ਪੰਜਾਬੀ</button>
+                </div>
+              </div>
+
+              <!-- Length Selection -->
+              <div>
+                <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Length</label>
+                <div class="grid grid-cols-4 gap-1 p-1 bg-neutral-950 rounded-xl border border-neutral-800 text-xs text-center" id="hubLenBar">
+                  <button type="button" onclick="setHubLen(this, 'all')" class="py-1 px-1 rounded-lg font-bold bg-indigo-600 text-white shadow-xs">All</button>
+                  <button type="button" onclick="setHubLen(this, 'short')" class="py-1 px-1 rounded-lg font-bold text-neutral-400 hover:text-white">⚡ Short</button>
+                  <button type="button" onclick="setHubLen(this, 'mid')" class="py-1 px-1 rounded-lg font-bold text-neutral-400 hover:text-white">📝 Mid</button>
+                  <button type="button" onclick="setHubLen(this, 'long')" class="py-1 px-1 rounded-lg font-bold text-neutral-400 hover:text-white">📖 Story</button>
+                </div>
+              </div>
+
+              <!-- Keywords / Context -->
+              <div>
+                <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1">Keywords or dishes/services (optional)</label>
+                <input type="text" id="modalKeywordsInput" placeholder="e.g. paneer tikka, prompt service..." class="w-full px-3 py-2 text-xs bg-neutral-950 border border-neutral-800 rounded-xl text-white placeholder-neutral-600 focus:outline-none focus:border-amber-400">
+              </div>
+
               <div>
                 <label class="block text-xs font-semibold text-neutral-300 mb-2">What did you love most? (Tap to select)</label>
                 <div id="tagsContainer" class="flex flex-wrap gap-1.5"></div>
@@ -1042,6 +872,26 @@ async function startServer() {
             let currentGoogleUrl = '';
             let selectedPraiseTags = [];
             let currentWifiPass = '';
+            let hubSelectedLang = 'all';
+            let hubSelectedLen = 'all';
+
+            function setHubLang(btn, lang) {
+              hubSelectedLang = lang;
+              const buttons = document.querySelectorAll('#hubLangBar button');
+              buttons.forEach(b => {
+                b.className = 'py-1 px-2 rounded-lg font-bold text-neutral-400 hover:text-white';
+              });
+              btn.className = 'py-1 px-2 rounded-lg font-bold bg-amber-400 text-neutral-950 shadow-xs';
+            }
+
+            function setHubLen(btn, len) {
+              hubSelectedLen = len;
+              const buttons = document.querySelectorAll('#hubLenBar button');
+              buttons.forEach(b => {
+                b.className = 'py-1 px-1 rounded-lg font-bold text-neutral-400 hover:text-white';
+              });
+              btn.className = 'py-1 px-1 rounded-lg font-bold bg-indigo-600 text-white shadow-xs';
+            }
 
             function openReviewModal(bName, bCat, gUrl, tagsStr) {
               currentBizName = bName;
@@ -1085,6 +935,7 @@ async function startServer() {
             async function generateReviews() {
               const genBtn = document.getElementById('generateBtn');
               const list = document.getElementById('reviewsList');
+              const kwInput = document.getElementById('modalKeywordsInput');
               genBtn.disabled = true;
               genBtn.innerText = 'Drafting Unique Reviews...';
 
@@ -1096,6 +947,9 @@ async function startServer() {
                     businessName: currentBizName,
                     businessCategory: currentBizCat,
                     praiseTags: selectedPraiseTags,
+                    keywords: kwInput ? kwInput.value : '',
+                    language: hubSelectedLang,
+                    length: hubSelectedLen,
                   })
                 });
                 const data = await res.json();
@@ -1104,12 +958,19 @@ async function startServer() {
                 if (reviews.length > 0) {
                   list.innerHTML = reviews.map((r) => {
                     const cleanText = r.text.replace(/"/g, '&quot;');
+                    const langBadge = r.language === 'hi' ? '🇮🇳 हिन्दी' : r.language === 'pa' ? '🇮🇳 ਪੰਜਾਬੀ' : '🇬🇧 English';
+                    const lenBadge = r.length === 'short' ? '⚡ Short' : r.length === 'long' ? '📖 Story' : '📝 Mid';
+
                     return '<div class="p-3 bg-neutral-950 border border-neutral-800 rounded-2xl text-left space-y-2">' +
                       '<div class="flex items-center justify-between text-[11px] font-bold text-amber-400 font-mono">' +
-                        '<span>' + (r.title || 'Review Option') + '</span>' +
+                        '<div class="flex items-center gap-1.5">' +
+                          '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">' + langBadge + '</span>' +
+                          '<span class="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 font-bold">' + lenBadge + '</span>' +
+                          '<span class="text-white font-bold ml-1">' + (r.title || 'Review Option') + '</span>' +
+                        '</div>' +
                         '<span>★★★★★</span>' +
                       '</div>' +
-                      '<p class="text-xs text-neutral-300 leading-relaxed font-normal">' + r.text + '</p>' +
+                      '<p class="text-xs text-neutral-300 leading-relaxed font-normal">"' + r.text + '"</p>' +
                       '<button type="button" onclick="copyAndOpenGoogle(\\'' + cleanText.replace(/'/g, "\\\\'") + '\\')" class="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors shadow-xs active:scale-98">' +
                         '<span>1-Tap Copy & Open Google</span>' +
                       '</button>' +
@@ -1181,7 +1042,7 @@ async function startServer() {
     }
 
     // If Review Gatekeeper presentation mode is enabled
-    if ((link.presentationMode === 'review_gate' || link.reviewGate?.enabled) && req.query.direct !== '1') {
+    if (link.presentationMode === 'review_gate' && req.query.direct !== '1') {
       const reviewGate = link.reviewGate || {
         enabled: true,
         businessName: link.title,
@@ -2479,26 +2340,32 @@ async function startServer() {
       businessCategory = 'Local Business',
       praiseTags = [],
       customNotes = '',
+      keywords = '',
       tone = 'friendly',
+      language = 'all',
+      length = 'all',
       iteration = 0,
       requestedCount,
     } = req.body;
 
     const iterNum = parseInt(iteration, 10) || Date.now();
-    // Dynamically vary count between 3 and 5 if not explicitly requested
     const targetCount = Math.min(
-      Math.max(parseInt(requestedCount, 10) || 3 + ((Math.abs(iterNum) + 1) % 3), 3),
-      5
+      Math.max(parseInt(requestedCount, 10) || 4, 3),
+      6
     );
 
     const tagsText = Array.isArray(praiseTags) && praiseTags.length > 0 ? praiseTags.join(', ') : 'great service, friendly staff';
+    const keywordsText = typeof keywords === 'string' ? keywords : Array.isArray(keywords) ? keywords.join(', ') : '';
 
     const fallbackReviews = generateProceduralReviews({
       businessName,
       businessCategory,
       praiseTags,
       customNotes,
+      keywords: keywordsText,
       tone,
+      language: language as any,
+      length: length as any,
       iteration: iterNum,
       requestedCount: targetCount,
     });
@@ -2508,29 +2375,60 @@ async function startServer() {
     }
 
     try {
-      const prompt = `You are an authentic, everyday human customer writing a real 5-star Google review on a smartphone for "${businessName}", which is a "${businessCategory}".
-Selected highlights from this visit: ${tagsText}.
-Optional customer note: ${customNotes || 'none'}.
+      let langDirective = '';
+      if (language === 'hi') {
+        langDirective = 'Generate all reviews strictly in natural, everyday HINDI (हिन्दी - Devanagari script). Use natural conversational Hindi as real customers write on Google Maps (e.g. "यहाँ का खाना वाकई बहुत स्वादिष्ट है...", "स्टाफ का व्यवहार बहुत विनम्र है..."). Do NOT use stiff robotic translation.';
+      } else if (language === 'pa') {
+        langDirective = 'Generate all reviews strictly in natural, warm PUNJABI (ਪੰਜਾਬੀ - Gurmukhi script). Use natural conversational Punjabi as authentic customers write on Google Maps (e.g. "ਬਹੁਤ ਹੀ ਵਧੀਆ ਸਰਵਿਸ ਤੇ ਕੁਆਲਿਟੀ!", "ਸਟਾਫ ਬਹੁਤ ਮਿਲਣਸਾਰ ਹੈ...", "ਪੈਸਾ ਵਸੂਲ ਕੰਮ!"). Do NOT use stiff robotic translation.';
+      } else if (language === 'en') {
+        langDirective = 'Generate all reviews in clear, natural, everyday English as authentic smartphone users write.';
+      } else {
+        langDirective = 'Generate a balanced mix of reviews: English, authentic conversational Hindi (हिन्दी in Devanagari script), and authentic colloquial Punjabi (ਪੰਜਾਬੀ in Gurmukhi script) so the customer can pick their preferred language.';
+      }
+
+      let lengthDirective = '';
+      if (length === 'short') {
+        lengthDirective = 'All reviews should be SHORT & PUNCHY (1-2 sentences, ~15-25 words).';
+      } else if (length === 'mid') {
+        lengthDirective = 'All reviews should be MEDIUM length (2-3 sentences, ~35-50 words).';
+      } else if (length === 'long') {
+        lengthDirective = 'All reviews should be DETAILED CUSTOMER STORIES (4-6 sentences, ~70-110 words) highlighting specific visit details and strong recommendations.';
+      } else {
+        lengthDirective = 'Provide a variety of lengths across the reviews: at least one Short (1-2 sentences), one Medium (2-3 sentences), and one Detailed Story (4-5 sentences).';
+      }
+
+      const prompt = `You are a real customer writing authentic 5-star Google reviews on a smartphone for "${businessName}", which is a "${businessCategory}".
+Key business highlights: ${tagsText}.
+Keywords / specialties mentioned: ${keywordsText || 'friendly staff, reliable service, clean ambience'}.
+Customer personal note: ${customNotes || 'none'}.
 Desired tone: ${tone}.
 Iteration seed: ${iterNum}.
 
-CRITICAL INSTRUCTIONS FOR 100% ORGANIC & VARIED REVIEWS:
-1. Generate EXACTLY ${targetCount} DISTINCT reviews (count: ${targetCount}).
-2. Every single review must sound like it was written by a completely different individual with their own voice and vocabulary.
-3. NEVER repeat sentence structures, openings, or phrases between options.
-4. ABSOLUTELY FORBIDDEN: Promotional AI buzzwords such as "testament to excellence", "delve", "orchestrated", "par excellence", "game-changer", "plethora", "beacon of quality", "nestled", "tapestry", "seamlessly blends", "culinary journey".
-5. Ground each review in believable details authentic to a "${businessCategory}" (e.g. food taste, wait time, haircut technique, bedside manner, fair pricing, clean workspace).
-6. Provide distinct perspectives:
-   - Option 1: Short & punchy (2 sentences)
-   - Option 2: Detailed highlight of specific experience (${tagsText}) (3-4 sentences)
-   - Option 3: Warm personal shoutout to the staff & atmosphere (2-3 sentences)
-   ${targetCount >= 4 ? '- Option 4: Repeat customer or strong recommendation to friends (2-3 sentences)' : ''}
-   ${targetCount >= 5 ? '- Option 5: Honest praise on value, speed, or quality (2-3 sentences)' : ''}
+LANGUAGE REQUIREMENT:
+${langDirective}
+
+LENGTH REQUIREMENT:
+${lengthDirective}
+
+CRITICAL RULES FOR 100% ORGANIC & ORIGINAL REVIEWS:
+1. Generate EXACTLY ${targetCount} reviews.
+2. Every review must sound like a DIFFERENT real person with their own voice.
+3. NEVER repeat sentence starters or phrases between reviews.
+4. ABSOLUTELY FORBIDDEN: AI buzzwords like "testament to excellence", "delve", "orchestrated", "par excellence", "game-changer", "plethora", "beacon of quality", "nestled", "tapestry", "seamlessly blends", "culinary journey".
+5. Ground reviews in believable details authentic to "${businessName}" and "${businessCategory}".
+6. Accurately mark "language" as "en", "hi", or "pa", and "length" as "short", "mid", or "long".
 
 Respond ONLY with valid JSON in this exact structure:
 {
   "reviews": [
-    { "id": 1, "title": "Short Label", "text": "..." }
+    {
+      "id": 1,
+      "title": "Short descriptive label",
+      "text": "...",
+      "language": "en",
+      "length": "short",
+      "badge": "English"
+    }
   ]
 }`;
 
@@ -2540,7 +2438,7 @@ Respond ONLY with valid JSON in this exact structure:
           contents: prompt,
           config: {
             responseMimeType: 'application/json',
-            temperature: 1.1,
+            temperature: 1.15,
           },
         }),
         new Promise<never>((_, reject) =>
@@ -2563,6 +2461,129 @@ Respond ONLY with valid JSON in this exact structure:
       console.warn('Gemini generate review error/timeout, using procedural fallback:', err?.message || err);
       return res.json({ reviews: fallbackReviews });
     }
+  });
+
+  // 1.5. Live Google Maps Place Auto-Search & Review Link Resolver
+  app.get('/api/places/search', async (req: Request, res: Response) => {
+    const query = String(req.query.query || '').trim();
+    if (!query || query.length < 2) {
+      return res.json({ places: [] });
+    }
+
+    // 1. If Google Maps API Key is available, try Places API (New) Text Search
+    const gmpKey = process.env.VITE_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
+    if (gmpKey) {
+      try {
+        const placesRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': gmpKey,
+            'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.primaryTypeDisplayName,places.googleMapsUri',
+          },
+          body: JSON.stringify({ textQuery: query, maxResultCount: 5 }),
+        });
+        if (placesRes.ok) {
+          const gData = await placesRes.json();
+          if (Array.isArray(gData.places) && gData.places.length > 0) {
+            const mapped = gData.places.map((p: any) => {
+              const placeId = p.id || '';
+              const name = p.displayName?.text || query;
+              const formattedAddress = p.formattedAddress || '';
+              const rating = p.rating || 4.8;
+              const category = p.primaryTypeDisplayName?.text || 'Local Business';
+              return {
+                placeId,
+                name,
+                formattedAddress,
+                rating,
+                userRatingsTotal: p.userRatingCount || 50,
+                category,
+                googleReviewUrl: placeId ? `https://search.google.com/local/writereview?placeid=${encodeURIComponent(placeId)}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + ' ' + formattedAddress)}`,
+                mapsUrl: p.googleMapsUri || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + ' ' + formattedAddress)}`,
+                suggestedTags: ['Warm Hospitality', 'High Quality', 'Prompt Service', 'Great Value', 'Highly Recommended'],
+              };
+            });
+            return res.json({ places: mapped });
+          }
+        }
+      } catch (err) {
+        console.warn('GMP Places API query failed, falling back to AI/synthetic lookup:', err);
+      }
+    }
+
+    // 2. Use Gemini 3.8 Flash to intelligently resolve place information and direct review URLs
+    if (ai) {
+      try {
+        const prompt = `You are a Google Maps business directory lookup assistant.
+Given the search query: "${query}", identify up to 3 realistic or real local businesses/places that match this name and location.
+For each place, provide:
+- "name": Business name (e.g. "Royal Biryani House")
+- "formattedAddress": Complete address with street, locality, city, and postal code
+- "placeId": The real or realistic Google Place ID (e.g. "ChIJ" followed by 23 alphanumeric characters)
+- "category": Accurate category (e.g. "Restaurant", "Cafe", "Dental Clinic", "Boutique", "Bakery")
+- "rating": Average rating (number between 4.2 and 4.9)
+- "userRatingsTotal": Estimated reviews count (number like 340)
+- "googleReviewUrl": The official Google review submission link ("https://search.google.com/local/writereview?placeid=" + placeId)
+- "mapsUrl": Link to view on Google Maps ("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(name + " " + formattedAddress))
+- "suggestedTags": Array of 5 authentic highlight keywords for customer reviews (e.g. ["Superb Food", "Friendly Staff", "Clean & Hygienic", "Quick Service", "Ambiance"])
+
+Respond ONLY with valid JSON in this exact structure:
+{
+  "places": [
+    {
+      "name": "...",
+      "formattedAddress": "...",
+      "placeId": "...",
+      "category": "...",
+      "rating": 4.7,
+      "userRatingsTotal": 420,
+      "googleReviewUrl": "...",
+      "mapsUrl": "...",
+      "suggestedTags": ["...", "..."]
+    }
+  ]
+}`;
+
+        const aiResponse = await Promise.race([
+          ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              temperature: 0.2,
+            },
+          }),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('AI Place search timeout')), 7000)),
+        ]);
+
+        const text = aiResponse.text?.trim() || '';
+        const parsed = JSON.parse(text);
+        if (parsed.places && Array.isArray(parsed.places) && parsed.places.length > 0) {
+          return res.json(parsed);
+        }
+      } catch (err: any) {
+        console.warn('Gemini place search failed or timed out:', err?.message || err);
+      }
+    }
+
+    // 3. Fallback procedural generator if offline or rate limited
+    const cleanQuery = query.replace(/[^\w\s,.-]/gi, '').trim();
+    const hash = Buffer.from(cleanQuery).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+    const placeId = `ChIJ_${hash}`;
+    const fallbackPlace = {
+      name: cleanQuery.split(',')[0].trim() || 'Local Business',
+      formattedAddress: cleanQuery.includes(',') ? cleanQuery : `${cleanQuery}, Main Road, Commercial District`,
+      placeId,
+      category: 'Local Business',
+      rating: 4.8,
+      userRatingsTotal: 156,
+      googleReviewUrl: `https://search.google.com/local/writereview?placeid=${placeId}`,
+      mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanQuery)}`,
+      suggestedTags: ['Warm Hospitality', 'High Quality', 'Prompt Service', 'Great Value', 'Highly Recommended'],
+    };
+
+    return res.json({ places: [fallbackPlace] });
   });
 
   // 2. AI Owner Reply Assistant (Empathetic De-escalation & Resolution)

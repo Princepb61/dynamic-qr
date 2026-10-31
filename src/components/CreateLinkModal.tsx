@@ -18,8 +18,10 @@ import {
   EyeOff,
   User,
 } from 'lucide-react';
-import { VCardData, WifiData } from '../types';
+import { VCardData, WifiData, MockupCategory } from '../types';
 import { generateVCardString, generateWifiString } from '../utils/vcardHelper';
+import { GooglePlaceSearchInput, PlaceResult } from './GooglePlaceSearchInput';
+import { MOCKUP_LABELS } from '../utils/bulkExportHelper';
 
 interface CreateLinkModalProps {
   isOpen: boolean;
@@ -36,6 +38,11 @@ interface CreateLinkModalProps {
     vcardData?: VCardData;
     wifiData?: WifiData;
     reviewGate?: any;
+    targetMockup?: MockupCategory;
+    standNumber?: string;
+    placeId?: string;
+    placeAddress?: string;
+    placeRating?: number;
     qrSettings?: {
       colorDark?: string;
       colorLight?: string;
@@ -69,6 +76,13 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
   const [tagsInput, setTagsInput] = useState('');
   const [quantity, setQuantity] = useState<number>(1);
   const [isUnassignedReservation, setIsUnassignedReservation] = useState<boolean>(false);
+
+  // Target Graphic Mockup & Stand Number for Bulk Print Shop
+  const [targetMockup, setTargetMockup] = useState<MockupCategory>('google_review');
+  const [standNumber, setStandNumber] = useState('');
+  const [placeId, setPlaceId] = useState('');
+  const [placeAddress, setPlaceAddress] = useState('');
+  const [placeRating, setPlaceRating] = useState<number | undefined>(undefined);
 
   // Preset 1: URL
   const [urlInput, setUrlInput] = useState('');
@@ -316,6 +330,11 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
         vcardData,
         wifiData,
         reviewGate,
+        targetMockup,
+        standNumber: standNumber.trim() || undefined,
+        placeId: placeId.trim() || undefined,
+        placeAddress: placeAddress.trim() || undefined,
+        placeRating,
         qrSettings: {
           colorDark,
           colorLight: '#ffffff',
@@ -467,6 +486,33 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
               {/* Type: Google Review */}
               {contentType === 'google_review' && (
                 <div className="space-y-3 p-3.5 bg-neutral-50 dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-700">
+                  <div className="space-y-1.5 p-3 rounded-xl bg-amber-500/10 dark:bg-neutral-900 border border-amber-500/30">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-bold text-amber-600 dark:text-amber-300">
+                        Auto-Search Google Maps Business Profile
+                      </label>
+                      <span className="text-[10px] text-neutral-400">Search city &amp; name</span>
+                    </div>
+                    <GooglePlaceSearchInput
+                      initialQuery={businessName}
+                      placeholder="Type business name &amp; city (e.g. Copper Kettle Cafe Mumbai)..."
+                      onSelectPlace={(place) => {
+                        setGooglePlaceOrUrl(place.googleReviewUrl);
+                        setBusinessName(place.name);
+                        setPlaceId(place.placeId);
+                        setPlaceAddress(place.formattedAddress);
+                        setPlaceRating(place.rating);
+                        if (!title) {
+                          setTitle(`${place.name} - Review Stand`);
+                        }
+                        if (!description) {
+                          setDescription(place.formattedAddress);
+                        }
+                        setTargetMockup('google_review');
+                      }}
+                    />
+                  </div>
+
                   <div>
                     <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
                       Google Review Link or Google Place ID *
@@ -775,6 +821,51 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* Target Physical Mockup Template */}
+          <div className="p-3.5 bg-neutral-100/60 dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-700 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
+                <span>🖼️ Physical Mockup Graphic Template</span>
+                <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-600 dark:text-amber-300 text-[10px] font-mono">PRINT READY</span>
+              </label>
+              <span className="text-[10px] text-neutral-500">For Bulk Print Shop</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {Object.entries(MOCKUP_LABELS).map(([key, meta]) => {
+                const isSelected = targetMockup === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setTargetMockup(key as MockupCategory)}
+                    className={`p-2 rounded-xl border text-left transition-all flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-amber-500/15 border-amber-500 text-neutral-900 dark:text-white font-bold ring-1 ring-amber-500/30'
+                        : 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'
+                    }`}
+                  >
+                    <span className="text-sm shrink-0">{meta.icon}</span>
+                    <span className="text-[11px] truncate">{meta.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-neutral-600 dark:text-neutral-400 mb-1">
+                Stand / Table Number (Optional)
+              </label>
+              <input
+                type="text"
+                value={standNumber}
+                onChange={(e) => setStandNumber(e.target.value)}
+                placeholder="e.g. Table 01, VIP Stand #3"
+                className="w-full px-3 py-1.5 text-xs font-mono bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
 
           {/* Quick Preview & Frame Selector */}
           <div className="pt-2 border-t border-neutral-200 dark:border-neutral-800 flex items-center gap-4">

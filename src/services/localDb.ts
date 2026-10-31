@@ -53,155 +53,47 @@ function getInitialLocalDatabase(): LocalDatabase {
     },
   ];
 
-  const links: LinkRecord[] = [
-    {
-      id: 'link_1',
-      slug: 'summer-promo',
-      title: 'Summer Seasonal Campaign Flyer',
-      destinationUrl: 'https://en.wikipedia.org/wiki/Summer',
-      description: 'Printed on outdoor banners and promotional flyers across retail stores',
-      isActive: true,
-      createdAt: daysAgo(12),
-      updatedAt: daysAgo(1),
-      tags: ['Marketing', 'Print', 'Flyer'],
-      totalClicks: 184,
-      ownerId: 'usr_admin_1',
-      ownerEmail: 'p0667500@gmail.com',
-      ownerName: 'System Administrator',
-      qrSettings: {
-        colorDark: '#000000',
-        colorLight: '#ffffff',
-        errorCorrectionLevel: 'H',
-        margin: 2,
-      },
-      dynamicButton: {
-        enabled: true,
-        text: 'Claim Summer Discount',
-        subtitle: 'Limited-time seasonal promotion',
-        theme: 'indigo',
-        icon: 'zap',
-        shape: 'rounded',
-        animation: 'pulse',
-        showQRBadge: true,
-      },
-      presentationMode: 'instant_redirect',
-    },
-    {
-      id: 'link_2',
-      slug: 'menu-main',
-      title: 'Dining Room Digital Menu Card',
-      destinationUrl: 'https://en.wikipedia.org/wiki/Menu',
-      description: 'Laminated stickers placed on all dining room tables',
-      isActive: true,
-      createdAt: daysAgo(20),
-      updatedAt: daysAgo(3),
-      tags: ['Hospitality', 'Tables', 'Menu'],
-      totalClicks: 421,
-      ownerId: 'usr_admin_1',
-      ownerEmail: 'p0667500@gmail.com',
-      ownerName: 'System Administrator',
-      qrSettings: {
-        colorDark: '#000000',
-        colorLight: '#ffffff',
-        errorCorrectionLevel: 'H',
-        margin: 2,
-      },
-      dynamicButton: {
-        enabled: true,
-        text: 'View Seasonal Menu',
-        subtitle: 'Fresh farm-to-table selections',
-        theme: 'emerald',
-        icon: 'sparkles',
-        shape: 'rounded',
-        animation: 'none',
-        showQRBadge: true,
-      },
-      presentationMode: 'instant_redirect',
-    },
-    {
-      id: 'link_pre_1',
-      slug: 'stock-table-01',
-      title: 'Pre-Printed Acrylic Stand #01',
-      destinationUrl: 'https://google.com',
-      description: 'Pre-printed acrylic stand on dining table 1',
-      isActive: true,
-      isAssigned: true,
-      batchId: 'batch_seed_1',
-      batchName: 'Dining Table Stands',
-      batchIndex: 1,
-      createdAt: daysAgo(2),
-      updatedAt: daysAgo(1),
-      tags: ['Pre-Printed', 'Dining Tables'],
-      totalClicks: 15,
-      ownerId: 'usr_admin_1',
-      ownerEmail: 'p0667500@gmail.com',
-      ownerName: 'System Administrator',
-      qrSettings: {
-        colorDark: '#000000',
-        colorLight: '#ffffff',
-        errorCorrectionLevel: 'H',
-        margin: 2,
-      },
-    },
-    {
-      id: 'link_pre_2',
-      slug: 'stock-table-02',
-      title: 'Pre-Printed Acrylic Stand #02',
-      destinationUrl: '',
-      description: 'Pre-printed acrylic stand on dining table 2, waiting for campaign menu link',
-      isActive: true,
-      isAssigned: false,
-      batchId: 'batch_seed_1',
-      batchName: 'Dining Table Stands',
-      batchIndex: 2,
-      createdAt: daysAgo(2),
-      updatedAt: daysAgo(2),
-      tags: ['Pre-Printed', 'Dining Tables'],
-      totalClicks: 0,
-      ownerId: 'usr_admin_1',
-      ownerEmail: 'p0667500@gmail.com',
-      ownerName: 'System Administrator',
-      qrSettings: {
-        colorDark: '#000000',
-        colorLight: '#ffffff',
-        errorCorrectionLevel: 'H',
-        margin: 2,
-      },
-    },
-  ];
+  const PURGED_SLUGS = new Set([
+    'summer-promo',
+    'stock-table-01',
+    'stock-table-02',
+    'menu-main',
+    'stock-sticker-101',
+    'vip-menu',
+    'user-guide',
+    'survey-feedback',
+  ]);
 
+  const links: LinkRecord[] = [];
   const clicks: ClickRecord[] = [];
-  const devices: Array<'mobile' | 'desktop' | 'tablet'> = ['mobile', 'mobile', 'mobile', 'desktop', 'tablet'];
-  const browsers = ['Mobile Safari', 'Chrome Mobile', 'Safari', 'Chrome'];
-  const osList = ['iOS 18.1', 'Android 15', 'macOS 15.1', 'Windows 11'];
-  const countries = ['United States', 'Germany', 'United Kingdom', 'Canada'];
-
-  links.forEach((l) => {
-    for (let i = 0; i < Math.min(l.totalClicks, 20); i++) {
-      clicks.push({
-        id: `clk_${l.id}_${i}`,
-        linkId: l.id,
-        slug: l.slug,
-        timestamp: daysAgo(Math.floor(Math.random() * 7), Math.floor(Math.random() * 24)),
-        referrer: 'Camera QR Scan',
-        deviceType: devices[Math.floor(Math.random() * devices.length)],
-        browser: browsers[Math.floor(Math.random() * browsers.length)],
-        os: osList[Math.floor(Math.random() * osList.length)],
-        ip: `192.168.1.${Math.floor(Math.random() * 254) + 1}`,
-        country: countries[Math.floor(Math.random() * countries.length)],
-        userAgent: 'Mobile Scanner',
-      });
-    }
-  });
 
   return { users, links, clicks };
 }
+
+const PURGED_SLUGS = new Set([
+  'summer-promo',
+  'stock-table-01',
+  'stock-table-02',
+  'menu-main',
+  'stock-sticker-101',
+  'vip-menu',
+  'user-guide',
+  'survey-feedback',
+]);
 
 function loadDb(): LocalDatabase {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      return JSON.parse(raw);
+      const data: LocalDatabase = JSON.parse(raw);
+      if (Array.isArray(data.links)) {
+        data.links = data.links.filter((l) => l && l.slug && !PURGED_SLUGS.has(l.slug.toLowerCase()));
+      }
+      if (Array.isArray(data.clicks)) {
+        data.clicks = data.clicks.filter((c) => c && c.slug && !PURGED_SLUGS.has(c.slug.toLowerCase()));
+      }
+      saveDb(data);
+      return data;
     }
   } catch (err) {
     console.error('Failed to parse localStorage db:', err);
@@ -305,16 +197,9 @@ export const localDb = {
 
   async updateLink(id: string, payload: any) {
     const db = loadDb();
-    const link = db.links.find((l) => l.id === id);
+    const link = db.links.find((l) => l.id === id || l.slug.toLowerCase() === id.toLowerCase());
     if (!link) throw new Error('Link not found');
-    if (payload.destinationUrl !== undefined) link.destinationUrl = payload.destinationUrl;
-    if (payload.title !== undefined) link.title = payload.title;
-    if (payload.description !== undefined) link.description = payload.description;
-    if (payload.isActive !== undefined) link.isActive = payload.isActive;
-    if (payload.tags !== undefined) link.tags = payload.tags;
-    if (payload.qrSettings !== undefined) link.qrSettings = payload.qrSettings;
-    if (payload.dynamicButton !== undefined) link.dynamicButton = payload.dynamicButton;
-    if (payload.presentationMode !== undefined) link.presentationMode = payload.presentationMode;
+    Object.assign(link, payload);
     link.updatedAt = new Date().toISOString();
     saveDb(db);
     return { success: true, message: 'Link updated successfully', link };
