@@ -7,6 +7,7 @@ import * as UAParserModule from 'ua-parser-js';
 import QRCode from 'qrcode';
 import { GoogleGenAI } from '@google/genai';
 import { generateProceduralReviews } from './src/utils/proceduralReviewGenerator';
+import { validateSecureHttpsUrl } from './src/utils/urlValidator';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1759,8 +1760,12 @@ async function startServer() {
     }
 
     let target = (destinationUrl || '').trim();
-    if (target && !target.startsWith('http://') && !target.startsWith('https://') && !target.startsWith('data:') && !target.startsWith('WIFI:')) {
-      target = 'https://' + target;
+    if (target) {
+      const valResult = validateSecureHttpsUrl(target, { allowSpecialSchemes: true });
+      if (!valResult.isValid) {
+        return res.status(400).json({ error: valResult.error || 'Destination URL must be a valid, secure HTTPS link (https://...).' });
+      }
+      target = valResult.sanitizedUrl || target;
     }
 
     link.destinationUrl = target;
@@ -1796,8 +1801,12 @@ async function startServer() {
     } = req.body;
 
     let target = (destinationUrl || '').trim();
-    if (target && !target.startsWith('http://') && !target.startsWith('https://') && !target.startsWith('data:') && !target.startsWith('WIFI:')) {
-      target = 'https://' + target;
+    if (target) {
+      const valResult = validateSecureHttpsUrl(target, { allowSpecialSchemes: true });
+      if (!valResult.isValid) {
+        return res.status(400).json({ error: valResult.error || 'Destination URL must be a valid, secure HTTPS link (https://...).' });
+      }
+      target = valResult.sanitizedUrl || target;
     }
 
     const db = loadDatabase();
@@ -1932,16 +1941,11 @@ async function startServer() {
     let target = (destinationUrl || '').trim();
     const hasTarget = Boolean(target);
     if (hasTarget) {
-      if (!target.startsWith('http://') && !target.startsWith('https://') && !target.startsWith('data:') && !target.startsWith('WIFI:')) {
-        target = 'https://' + target;
+      const valResult = validateSecureHttpsUrl(target, { allowSpecialSchemes: true });
+      if (!valResult.isValid) {
+        return res.status(400).json({ error: valResult.error || 'Destination URL must be a valid, secure HTTPS link (https://...).' });
       }
-      try {
-        if (!target.startsWith('data:') && !target.startsWith('WIFI:')) {
-          new URL(target);
-        }
-      } catch {
-        return res.status(400).json({ error: 'Please enter a valid destination URL (e.g., https://example.com).' });
-      }
+      target = valResult.sanitizedUrl || target;
     }
 
     const createdRecords: LinkRecord[] = [];
@@ -2100,8 +2104,12 @@ async function startServer() {
 
     if (destinationUrl !== undefined) {
       let dest = (destinationUrl || '').trim();
-      if (dest && !dest.startsWith('http://') && !dest.startsWith('https://') && !dest.startsWith('data:') && !dest.startsWith('WIFI:')) {
-        dest = 'https://' + dest;
+      if (dest) {
+        const valResult = validateSecureHttpsUrl(dest, { allowSpecialSchemes: true });
+        if (!valResult.isValid) {
+          return res.status(400).json({ error: valResult.error || 'Destination URL must be a valid, secure HTTPS link (https://...).' });
+        }
+        dest = valResult.sanitizedUrl || dest;
       }
       current.destinationUrl = dest;
       current.isAssigned = Boolean(dest); // Mark batch stock as activated once assigned

@@ -30,10 +30,12 @@ import {
   Share2,
   Layers,
   Utensils,
+  ShieldAlert,
 } from 'lucide-react';
 import { getLast4Letters } from '../utils/a4QrHelper';
 import { downloadVCard, generateWifiString, generateVCardString } from '../utils/vcardHelper';
 import { ReviewGatekeeperView } from './ReviewGatekeeperView';
+import { validateSecureHttpsUrl } from '../utils/urlValidator';
 
 interface ClientRedirectHandlerProps {
   slug: string;
@@ -454,14 +456,15 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
 
       case 'url':
       default: {
-        let target = customUrl.trim();
-        if (!target) {
+        const raw = customUrl.trim();
+        if (!raw) {
           throw new Error('Please enter a destination website URL.');
         }
-        if (!target.startsWith('http://') && !target.startsWith('https://')) {
-          target = 'https://' + target;
+        const valResult = validateSecureHttpsUrl(raw);
+        if (!valResult.isValid) {
+          throw new Error(valResult.error || 'Destination URL must be a valid, secure HTTPS link.');
         }
-        new URL(target);
+        const target = valResult.sanitizedUrl || raw;
         return {
           destinationUrl: target,
           contentType: 'url',
@@ -483,6 +486,15 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
     } catch (err: any) {
       setAssignError(err.message || 'Please check the form inputs.');
       return;
+    }
+
+    if (payload.destinationUrl) {
+      const valResult = validateSecureHttpsUrl(payload.destinationUrl, { allowSpecialSchemes: true });
+      if (!valResult.isValid) {
+        setAssignError(valResult.error || 'Destination URL must be a valid, secure HTTPS link.');
+        return;
+      }
+      payload.destinationUrl = valResult.sanitizedUrl || payload.destinationUrl;
     }
 
     try {
@@ -1171,28 +1183,75 @@ export const ClientRedirectHandler: React.FC<ClientRedirectHandlerProps> = ({ sl
                 )}
 
                 {/* 7. CUSTOM URL FORM */}
-                {activePreset === 'url' && (
-                  <div className="p-4 bg-neutral-950/60 border border-neutral-800 rounded-2xl space-y-3">
-                    <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold">
-                      <Globe className="w-4 h-4" />
-                      <span>Custom Website Destination</span>
-                    </div>
+                {activePreset === 'url' && (() => {
+                  const urlValidation = customUrl.trim() ? validateSecureHttpsUrl(customUrl) : null;
+                  return (
+                    <div className="p-4 bg-neutral-950/60 border border-neutral-800 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold">
+                          <Globe className="w-4 h-4" />
+                          <span>Custom Website Destination</span>
+                        </div>
+                        <span className="text-[10px] text-neutral-400 font-mono">HTTPS Enforced</span>
+                      </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-neutral-300 mb-1">
-                        Destination URL <span className="text-indigo-400">*</span>
-                      </label>
-                      <input
-                        type="url"
-                        value={customUrl}
-                        onChange={(e) => setCustomUrl(e.target.value)}
-                        placeholder="https://example.com/daily-menu"
-                        required
-                        className="w-full px-3.5 py-2.5 text-xs font-mono bg-neutral-900 border border-neutral-700 rounded-xl text-white focus:outline-none focus:border-indigo-500"
-                      />
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-neutral-300">
+                          Destination URL <span className="text-indigo-400">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={customUrl}
+                            onChange={(e) => setCustomUrl(e.target.value)}
+                            placeholder="https://example.com/daily-menu"
+                            required
+                            className={`w-full pl-3.5 pr-8 py-2.5 text-xs font-mono bg-neutral-900 border rounded-xl text-white focus:outline-none transition-colors ${
+                              urlValidation
+                                ? urlValidation.isValid
+                                  ? 'border-emerald-500/80 focus:border-emerald-500 ring-1 ring-emerald-500/20'
+                                  : 'border-rose-500/80 focus:border-rose-500 ring-1 ring-rose-500/20'
+                                : 'border-neutral-700 focus:border-indigo-500'
+                            }`}
+                          />
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                            {urlValidation ? (
+                              urlValidation.isValid ? (
+                                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                              ) : (
+                                <ShieldAlert className="w-4 h-4 text-rose-400" />
+                              )
+                            ) : (
+                              <Lock className="w-3.5 h-3.5 text-neutral-500" />
+                            )}
+                          </div>
+                        </div>
+
+                        {urlValidation && (
+                          <div
+                            className={`px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1.5 ${
+                              urlValidation.isValid
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                            }`}
+                          >
+                            {urlValidation.isValid ? (
+                              <>
+                                <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                                <span>Valid secure HTTPS destination ({urlValidation.sanitizedUrl})</span>
+                              </>
+                            ) : (
+                              <>
+                                <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                                <span>{urlValidation.error}</span>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Shared Campaign / Location Title Input */}
                 <div>

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { Eye } from 'lucide-react';
 import { LinkRecord, BatchRecord, MockupCategory } from '../types';
 import { exportBulkPrintShopZip, MOCKUP_LABELS, ExportProgress } from '../utils/bulkExportHelper';
 
@@ -8,6 +9,7 @@ interface BulkPrintShopModalProps {
   links: LinkRecord[];
   batches: BatchRecord[];
   onUpdateLinks: (updated: LinkRecord[]) => Promise<void>;
+  onOpenMockup?: (link: LinkRecord) => void;
 }
 
 export const BulkPrintShopModal: React.FC<BulkPrintShopModalProps> = ({
@@ -16,6 +18,7 @@ export const BulkPrintShopModal: React.FC<BulkPrintShopModalProps> = ({
   links,
   batches,
   onUpdateLinks,
+  onOpenMockup,
 }) => {
   const [selectedBatchId, setSelectedBatchId] = useState<string>('all');
   const [selectedMockupFilter, setSelectedMockupFilter] = useState<string>('all');
@@ -407,19 +410,34 @@ export const BulkPrintShopModal: React.FC<BulkPrintShopModalProps> = ({
                             />
                           </td>
 
-                          {/* Target Mockup Dropdown */}
+                          {/* Target Mockup Dropdown & Live Preview */}
                           <td className="py-2 px-3">
-                            <select
-                              value={item.targetMockup || 'google_review'}
-                              onChange={(e) => handleMockupChange(item.slug, e.target.value as MockupCategory)}
-                              className="bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-amber-500 font-medium"
-                            >
-                              {Object.entries(MOCKUP_LABELS).map(([k, m]) => (
-                                <option key={k} value={k}>
-                                  {m.icon} {m.label}
-                                </option>
-                              ))}
-                            </select>
+                            <div className="flex items-center gap-1.5">
+                              <select
+                                value={item.targetMockup || 'google_review'}
+                                onChange={(e) => handleMockupChange(item.slug, e.target.value as MockupCategory)}
+                                className="bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-amber-500 font-medium"
+                              >
+                                {Object.entries(MOCKUP_LABELS).map(([k, m]) => (
+                                  <option key={k} value={k}>
+                                    {m.icon} {m.label}
+                                  </option>
+                                ))}
+                              </select>
+                              {onOpenMockup && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onClose();
+                                    onOpenMockup(item);
+                                  }}
+                                  className="p-1 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 transition-colors"
+                                  title="Open Live Mockup Studio for this stand"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </td>
 
                           {/* Link Title & Slug */}

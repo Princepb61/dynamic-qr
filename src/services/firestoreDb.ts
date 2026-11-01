@@ -327,6 +327,13 @@ export const firestoreDb = {
     return updated;
   },
 
+  async saveLink(idOrSlug: string, link: Partial<LinkRecord>): Promise<LinkRecord> {
+    const clean = idOrSlug.trim().toLowerCase().replace(/^\/r\//, '').replace(/^\//, '');
+    const docRef = doc(db, LINKS_COLLECTION, clean);
+    await setDoc(docRef, cleanDataForFirestore(link), { merge: true });
+    return link as LinkRecord;
+  },
+
   /**
    * Permanently delete a link from Firestore and record a cross-device tombstone
    * in `deleted_links` so no device can resurrect it from cache.

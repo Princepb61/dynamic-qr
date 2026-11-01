@@ -1,4 +1,5 @@
 import { LinkRecord, LinkAnalytics, GlobalOverview, ClickRecord, UserRecord, ClientAccount } from '../types';
+import { validateSecureHttpsUrl } from '../utils/urlValidator';
 
 const STORAGE_KEY = 'taplocalin_netlify_db_v1';
 
@@ -170,15 +171,34 @@ export const localDb = {
     return { links, totalLinks: links.length, totalClicks };
   },
 
+  getLinksSync(ownerId?: string): LinkRecord[] {
+    const db = loadDb();
+    let links = [...db.links];
+    if (ownerId && ownerId !== 'usr_admin_1') {
+      links = links.filter((l) => l.ownerId === ownerId);
+    }
+    return links;
+  },
+
   async createLink(payload: any) {
     const db = loadDb();
     const id = `link_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const slug = (payload.customSlug || Math.random().toString(36).substring(2, 7)).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+
+    let destUrl = payload.destinationUrl || '';
+    if (destUrl) {
+      const valResult = validateSecureHttpsUrl(destUrl, { allowSpecialSchemes: true });
+      if (!valResult.isValid) {
+        throw new Error(valResult.error || 'Destination URL must be a valid, secure HTTPS link.');
+      }
+      destUrl = valResult.sanitizedUrl || destUrl;
+    }
+
     const newLink: LinkRecord = {
       id,
       slug,
       title: payload.title || 'Dynamic Link',
-      destinationUrl: payload.destinationUrl || '',
+      destinationUrl: destUrl,
       description: payload.description || '',
       isActive: true,
       createdAt: new Date().toISOString(),
@@ -199,6 +219,15 @@ export const localDb = {
     const db = loadDb();
     const link = db.links.find((l) => l.id === id || l.slug.toLowerCase() === id.toLowerCase());
     if (!link) throw new Error('Link not found');
+
+    if (payload.destinationUrl !== undefined && payload.destinationUrl) {
+      const valResult = validateSecureHttpsUrl(payload.destinationUrl, { allowSpecialSchemes: true });
+      if (!valResult.isValid) {
+        throw new Error(valResult.error || 'Destination URL must be a valid, secure HTTPS link.');
+      }
+      payload.destinationUrl = valResult.sanitizedUrl || payload.destinationUrl;
+    }
+
     Object.assign(link, payload);
     link.updatedAt = new Date().toISOString();
     saveDb(db);
@@ -259,6 +288,14 @@ export const localDb = {
     const db = loadDb();
     const clean = idOrSlug.trim().toLowerCase().replace('/r/', '').replace('/', '');
     let link = db.links.find((l) => l.id === idOrSlug || l.slug.toLowerCase() === clean);
+
+    if (payload.destinationUrl) {
+      const valResult = validateSecureHttpsUrl(payload.destinationUrl, { allowSpecialSchemes: true });
+      if (!valResult.isValid) {
+        throw new Error(valResult.error || 'Destination URL must be a valid, secure HTTPS link.');
+      }
+      payload.destinationUrl = valResult.sanitizedUrl || payload.destinationUrl;
+    }
 
     if (!link) {
       link = {

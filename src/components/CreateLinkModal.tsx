@@ -17,11 +17,15 @@ import {
   Eye,
   EyeOff,
   User,
+  ShieldCheck,
+  ShieldAlert,
+  Lock,
 } from 'lucide-react';
 import { VCardData, WifiData, MockupCategory } from '../types';
 import { generateVCardString, generateWifiString } from '../utils/vcardHelper';
 import { GooglePlaceSearchInput, PlaceResult } from './GooglePlaceSearchInput';
 import { MOCKUP_LABELS } from '../utils/bulkExportHelper';
+import { validateSecureHttpsUrl } from '../utils/urlValidator';
 
 interface CreateLinkModalProps {
   isOpen: boolean;
@@ -179,18 +183,14 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
     } else {
       switch (contentType) {
         case 'url': {
-          let target = urlInput.trim();
-          if (target) {
-            if (!target.startsWith('http://') && !target.startsWith('https://')) {
-              target = 'https://' + target;
-            }
-            try {
-              new URL(target);
-            } catch {
-              setError('Please enter a valid website address.');
+          const rawTarget = urlInput.trim();
+          if (rawTarget) {
+            const validation = validateSecureHttpsUrl(rawTarget);
+            if (!validation.isValid) {
+              setError(validation.error || 'Destination URL must be a valid, secure HTTPS link.');
               return;
             }
-            destinationUrl = target;
+            destinationUrl = validation.sanitizedUrl || rawTarget;
           }
           // If empty and not explicit, allow creating as unassigned
           break;
@@ -315,6 +315,15 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
       : `Campaign ${customSlug.trim() || 'Dynamic'}`;
 
     const finalTitle = title.trim() || defaultTitle;
+
+    if (destinationUrl) {
+      const valResult = validateSecureHttpsUrl(destinationUrl, { allowSpecialSchemes: true });
+      if (!valResult.isValid) {
+        setError(valResult.error || 'Destination URL must be a valid, secure HTTPS link.');
+        return;
+      }
+      destinationUrl = valResult.sanitizedUrl || destinationUrl;
+    }
 
     try {
       setIsSubmitting(true);
@@ -468,20 +477,69 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
           {!isUnassignedReservation && contentType !== 'unassigned' && (
             <>
               {/* Type: URL */}
-              {contentType === 'url' && (
-                <div>
-                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
-                    Destination Website URL <span className="text-neutral-400">(optional - leave empty to assign later)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={urlInput}
-                    onChange={(e) => setUrlInput(e.target.value)}
-                    placeholder="https://example.com/daily-menu"
-                    className="w-full px-3.5 py-2 text-xs font-mono bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              )}
+              {contentType === 'url' && (() => {
+                const urlValidation = urlInput.trim() ? validateSecureHttpsUrl(urlInput) : null;
+                return (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                        Destination Website URL <span className="text-neutral-400 font-normal">(optional - leave empty to assign later)</span>
+                      </label>
+                      <span className="text-[10px] text-neutral-400 font-mono">HTTPS Enforced</span>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={urlInput}
+                        onChange={(e) => setUrlInput(e.target.value)}
+                        placeholder="https://example.com/daily-menu"
+                        className={`w-full pl-3.5 pr-8 py-2 text-xs font-mono bg-white dark:bg-neutral-800 border rounded-xl text-neutral-900 dark:text-white focus:outline-none transition-colors ${
+                          urlValidation
+                            ? urlValidation.isValid
+                              ? 'border-emerald-500/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20'
+                              : 'border-rose-500/80 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20'
+                            : 'border-neutral-300 dark:border-neutral-700 focus:border-indigo-500'
+                        }`}
+                      />
+                      <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                        {urlValidation ? (
+                          urlValidation.isValid ? (
+                            <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                          ) : (
+                            <ShieldAlert className="w-4 h-4 text-rose-500" />
+                          )
+                        ) : (
+                          <Lock className="w-3.5 h-3.5 text-neutral-400" />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Real-time Validation Status Pill */}
+                    {urlValidation && (
+                      <div
+                        className={`px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1.5 ${
+                          urlValidation.isValid
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                        }`}
+                      >
+                        {urlValidation.isValid ? (
+                          <>
+                            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                            <span>Valid, secure HTTPS destination URL ({urlValidation.sanitizedUrl})</span>
+                          </>
+                        ) : (
+                          <>
+                            <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                            <span>{urlValidation.error}</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Type: Google Review */}
               {contentType === 'google_review' && (

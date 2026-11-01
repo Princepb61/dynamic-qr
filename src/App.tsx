@@ -13,10 +13,14 @@ import { ProfileBackupModal } from './components/ProfileBackupModal';
 import { CameraQRScannerModal } from './components/CameraQRScannerModal';
 import { CustomerFeedbackModal } from './components/CustomerFeedbackModal';
 import { LinkAnalyticsModal } from './components/LinkAnalyticsModal';
+import { PhysicalMockupPreviewModal } from './components/PhysicalMockupPreviewModal';
+import { WebNFCWriterModal } from './components/WebNFCWriterModal';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { ToastContainer, ToastMessage } from './components/Toast';
-import { LinkRecord, GlobalOverview, UserRecord } from './types';
+import { LinkRecord, GlobalOverview, UserRecord, BatchRecord } from './types';
 import { api } from './services/api';
+import { localDb } from './services/localDb';
+import { firestoreDb } from './services/firestoreDb';
 import { RefreshCw, Plus } from 'lucide-react';
 
 export default function App() {
@@ -68,10 +72,23 @@ export default function App() {
     return null;
   });
 
-  // App data state
-  const [links, setLinks] = useState<LinkRecord[]>([]);
+  // App data state - Instant hydration from local cache (0ms render!)
+  const [links, setLinks] = useState<LinkRecord[]>(() => {
+    try {
+      return localDb.getLinksSync();
+    } catch {
+      return [];
+    }
+  });
   const [overview, setOverview] = useState<GlobalOverview | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(() => {
+    try {
+      const cached = localDb.getLinksSync();
+      return cached.length === 0;
+    } catch {
+      return true;
+    }
+  });
   const [error, setError] = useState<string | null>(null);
 
   // Modals state
@@ -82,6 +99,8 @@ export default function App() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [analyticsLink, setAnalyticsLink] = useState<LinkRecord | null>(null);
+  const [activeMockupLink, setActiveMockupLink] = useState<LinkRecord | null>(null);
+  const [activeNFCLink, setActiveNFCLink] = useState<LinkRecord | null>(null);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   const [feedbackBadgeCount, setFeedbackBadgeCount] = useState(0);
 
@@ -97,10 +116,30 @@ export default function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
+  const handleBulkUpdateLinks = async (updatedList: LinkRecord[]) => {
+    try {
+      for (const item of updatedList) {
+        await localDb.updateLink(item.id, item);
+        await firestoreDb.saveLink(item.slug, item);
+      }
+      addToast('success', `Saved mockup changes for ${updatedList.length} QR codes.`);
+      loadData(currentUser);
+    } catch (err: any) {
+      console.error('Failed to bulk update links:', err);
+      addToast('error', err?.message || 'Could not save mockup updates.');
+    }
+  };
+
   const loadData = async (user = currentUser) => {
     if (!user) return;
     try {
-      setLoading(true);
+      // 1. Immediately hydrate from local database synchronously without delay
+      const cached = localDb.getLinksSync(user.role === 'admin' ? undefined : user.id);
+      if (cached.length > 0) {
+        setLinks(cached);
+        setLoading(false);
+      }
+
       setError(null);
       const [linksData, overviewData] = await Promise.all([
         api.getLinks(user.role === 'admin' ? undefined : user.id),
@@ -109,20 +148,21 @@ export default function App() {
       setLinks(linksData.links);
       setOverview(overviewData);
 
-      // Fetch feedback count for badge
-      try {
-        const feedbackRes = await fetch('/api/feedback/list');
-        if (feedbackRes.ok) {
-          const feedbackData = await feedbackRes.json();
-          const unreadCount = (feedbackData.feedbacks || []).filter((f: any) => f.status === 'new').length;
-          setFeedbackBadgeCount(unreadCount);
-        }
-      } catch (e) {
-        // Ignore feedback badge fetch error
-      }
+      // Fetch feedback count for badge in background
+      fetch('/api/feedback/list')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d && Array.isArray(d.feedbacks)) {
+            const unreadCount = d.feedbacks.filter((f: any) => f.status === 'new').length;
+            setFeedbackBadgeCount(unreadCount);
+          }
+        })
+        .catch(() => {});
     } catch (err: any) {
       console.error('Data loading error:', err);
-      setError(err.message || 'Failed to connect to backend server');
+      if (links.length === 0) {
+        setError(err.message || 'Failed to connect to backend server');
+      }
     } finally {
       setLoading(false);
     }
@@ -177,6 +217,11 @@ export default function App() {
     vcardData?: any;
     wifiData?: any;
     reviewGate?: any;
+    targetMockup?: any;
+    standNumber?: string;
+    placeId?: string;
+    placeAddress?: string;
+    placeRating?: number;
   }) => {
     try {
       const newLink = await api.createLink({
@@ -343,10 +388,13 @@ export default function App() {
                     onOpenQR={(link) => setActiveQRLink(link)}
                     onOpenEdit={(link) => setActiveEditLink(link)}
                     onOpenPrint={(link) => setActiveQRLink(link)}
+                    onOpenMockup={(link) => setActiveMockupLink(link)}
+                    onOpenNFC={(link) => setActiveNFCLink(link)}
                     onDeleteLink={handleDeleteLink}
                     onToggleStatus={handleToggleStatus}
                     onOpenCreate={() => setIsCreateOpen(true)}
                     onUpdateLinkTags={(id, tags) => handleUpdateDestination(id, { tags })}
+                    onBulkUpdateLinks={handleBulkUpdateLinks}
                   />
                 </div>
               </div>
@@ -409,6 +457,21 @@ export default function App() {
         link={analyticsLink}
         isOpen={!!analyticsLink}
         onClose={() => setAnalyticsLink(null)}
+      />
+
+      {/* Live Physical Standee & Decal Mockup Studio Modal */}
+      <PhysicalMockupPreviewModal
+        isOpen={!!activeMockupLink}
+        link={activeMockupLink}
+        onClose={() => setActiveMockupLink(null)}
+        onOpenNFCWriter={(link) => setActiveNFCLink(link)}
+      />
+
+      {/* WebNFC Direct Chip Writer Modal */}
+      <WebNFCWriterModal
+        isOpen={!!activeNFCLink}
+        link={activeNFCLink}
+        onClose={() => setActiveNFCLink(null)}
       />
 
       {/* Admin Profile & Data Backup Modal */}

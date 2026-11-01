@@ -177,11 +177,18 @@ export const api = {
   async getLinks(ownerId?: string): Promise<{ links: LinkRecord[]; totalLinks: number; totalClicks: number }> {
     const localTombstones = getLocalTombstones();
 
-    // 1. Query Firestore for real-time cloud data and deleted tombstones
+    // 1. Query Firestore with fast 3s timeout for real-time cloud data
     try {
-      const [cloudLinks, cloudTombstones] = await Promise.all([
-        firestoreDb.getLinks(ownerId),
-        firestoreDb.getDeletedSlugs(),
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Firestore fetch timeout')), 3000)
+      );
+
+      const [cloudLinks, cloudTombstones] = await Promise.race([
+        Promise.all([
+          firestoreDb.getLinks(ownerId),
+          firestoreDb.getDeletedSlugs(),
+        ]),
+        timeoutPromise,
       ]);
 
       // Combine tombstones
@@ -237,6 +244,11 @@ export const api = {
     vcardData?: any;
     wifiData?: any;
     reviewGate?: any;
+    targetMockup?: any;
+    standNumber?: string;
+    placeId?: string;
+    placeAddress?: string;
+    placeRating?: number;
     qrSettings?: {
       colorDark?: string;
       colorLight?: string;
