@@ -23,10 +23,10 @@ import {
   Eye,
   Radio,
   Smartphone,
+  FolderArchive,
 } from 'lucide-react';
 import { getLast4Letters } from '../utils/a4QrHelper';
-import { BulkPrintShopModal } from './BulkPrintShopModal';
-import { MOCKUP_LABELS } from '../utils/bulkExportHelper';
+import { exportBatchQRsAsZip, BatchZipProgress } from '../utils/batchZipHelper';
 import { firestoreDb } from '../services/firestoreDb';
 import { localDb } from '../services/localDb';
 
@@ -38,8 +38,6 @@ interface LinksTableProps {
   onDeleteLink: (id: string) => void;
   onToggleStatus: (link: LinkRecord) => void;
   onOpenCreate: () => void;
-  onOpenMockup?: (link: LinkRecord) => void;
-  onOpenNFC?: (link: LinkRecord) => void;
   onUpdateLinkTags?: (id: string, tags: string[]) => void;
   onBulkUpdateLinks?: (updated: LinkRecord[]) => Promise<void>;
   batches?: BatchRecord[];
@@ -63,8 +61,6 @@ export const LinksTable: React.FC<LinksTableProps> = ({
   onDeleteLink,
   onToggleStatus,
   onOpenCreate,
-  onOpenMockup,
-  onOpenNFC,
   onUpdateLinkTags,
   onBulkUpdateLinks,
   batches = [],
@@ -75,9 +71,6 @@ export const LinksTable: React.FC<LinksTableProps> = ({
   const [viewMode, setViewMode] = useState<'folders' | 'flat'>('folders');
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
 
-  // Bulk Print Shop Modal state
-  const [isPrintShopOpen, setIsPrintShopOpen] = useState(false);
-
   // Collapsible batch folders state
   const [collapsedBatches, setCollapsedBatches] = useState<Record<string, boolean>>({});
 
@@ -85,7 +78,27 @@ export const LinksTable: React.FC<LinksTableProps> = ({
   const [tagModalLink, setTagModalLink] = useState<LinkRecord | null>(null);
   const [tagInputText, setTagInputText] = useState('');
 
+  // Batch ZIP Export state
+  const [zippingBatchId, setZippingBatchId] = useState<string | null>(null);
+  const [zipProgress, setZipProgress] = useState<BatchZipProgress | null>(null);
+
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+
+  const handleExportZip = async (batchName: string, batchLinks: LinkRecord[], batchId: string) => {
+    if (!batchLinks || batchLinks.length === 0) return;
+    try {
+      setZippingBatchId(batchId);
+      await exportBatchQRsAsZip(batchName, batchLinks, (p) => setZipProgress(p));
+      setTimeout(() => {
+        setZipProgress(null);
+      }, 3500);
+    } catch (err: any) {
+      console.error('Failed to export batch ZIP:', err);
+      alert(err.message || 'Could not export batch ZIP.');
+    } finally {
+      setZippingBatchId(null);
+    }
+  };
 
   const copyShortUrl = (slug: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -321,16 +334,6 @@ export const LinksTable: React.FC<LinksTableProps> = ({
             )}
           </div>
 
-          {/* Bulk Print Shop Export Button */}
-          <button
-            type="button"
-            onClick={() => setIsPrintShopOpen(true)}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-bold text-neutral-950 bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-300 hover:to-orange-300 rounded-xl transition-all shadow-xs whitespace-nowrap active:scale-98"
-            title="Export categorized QR codes into mockups (Google Reviews, Menu, WhatsApp, Social) with high-res PNG/SVGs & CSV"
-          >
-            <Printer className="w-3.5 h-3.5 stroke-[2.5]" />
-            <span>Print Shop Export</span>
-          </button>
 
           {/* Create Dynamic Link Button */}
           <button
@@ -454,17 +457,16 @@ export const LinksTable: React.FC<LinksTableProps> = ({
                   >
                     {!isStandalone && group.links.length > 0 && (
                       <div className="flex items-center gap-1.5">
-                        {onOpenMockup && (
-                          <button
-                            type="button"
-                            onClick={() => onOpenMockup(group.links[0])}
-                            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-900 bg-amber-300 hover:bg-amber-200 border border-amber-400 rounded-lg transition-colors shadow-2xs"
-                            title="Preview physical standee mockup before printing"
-                          >
-                            <Eye className="w-3.5 h-3.5 text-amber-800" />
-                            <span>Stand Mockup</span>
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleExportZip(group.batchName, group.links, group.batchId)}
+                          disabled={zippingBatchId === group.batchId}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-950 dark:text-amber-200 bg-amber-400 hover:bg-amber-300 dark:bg-amber-950/70 dark:hover:bg-amber-900 border border-amber-500/40 rounded-lg transition-colors shadow-2xs"
+                          title="Download batch QR codes as PNG images in a ZIP file (Link Code only, no URLs)"
+                        >
+                          <FolderArchive className="w-3.5 h-3.5 text-amber-800 dark:text-amber-400" />
+                          <span>{zippingBatchId === group.batchId ? `Zipping (${zipProgress?.percent || 0}%)...` : 'Download ZIP'}</span>
+                        </button>
                         <button
                           type="button"
                           onClick={() => onOpenPrint(group.links[0])}
@@ -478,6 +480,17 @@ export const LinksTable: React.FC<LinksTableProps> = ({
                     )}
                   </div>
                 </div>
+
+                {/* Batch ZIP Export Progress Banner for Links Table */}
+                {zippingBatchId === group.batchId && zipProgress && (
+                  <div className="px-5 py-2.5 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-300 flex items-center justify-between animate-in fade-in">
+                    <span className="flex items-center gap-2">
+                      <FolderArchive className="w-3.5 h-3.5 animate-pulse text-amber-400 shrink-0" />
+                      <span>{zipProgress.statusText}</span>
+                    </span>
+                    <span className="font-mono font-bold text-amber-400 shrink-0">{zipProgress.percent}%</span>
+                  </div>
+                )}
 
                 {/* Batch Links List (Collapsible) */}
                 {!isCollapsed && (
@@ -497,7 +510,6 @@ export const LinksTable: React.FC<LinksTableProps> = ({
                             <th className="px-5 py-2.5">Destination URL</th>
                             <th className="px-5 py-2.5 text-center">Scans</th>
                             <th className="px-5 py-2.5 text-center">Status</th>
-                            <th className="px-5 py-2.5 text-center">QR Studio</th>
                             <th className="px-5 py-2.5 text-right">Actions</th>
                           </tr>
                         </thead>
@@ -530,8 +542,7 @@ export const LinksTable: React.FC<LinksTableProps> = ({
                   <th className="px-5 py-3.5">Destination URL</th>
                   <th className="px-5 py-3.5 text-center">Scans</th>
                   <th className="px-5 py-3.5 text-center">Status</th>
-                  <th className="px-5 py-3.5 text-center">QR Studio</th>
-                  <th className="px-5 py-3.5 text-right">Print / Delete</th>
+                  <th className="px-5 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
@@ -684,23 +695,6 @@ export const LinksTable: React.FC<LinksTableProps> = ({
           </div>
         </div>
       )}
-      {/* 4. BULK PRINT SHOP MOCKUP EXPORTER MODAL */}
-      <BulkPrintShopModal
-        isOpen={isPrintShopOpen}
-        onClose={() => setIsPrintShopOpen(false)}
-        links={links}
-        batches={batches}
-        onUpdateLinks={async (updatedList) => {
-          if (onBulkUpdateLinks) {
-            await onBulkUpdateLinks(updatedList);
-            return;
-          }
-          for (const item of updatedList) {
-            await localDb.updateLink(item.id, item);
-            await firestoreDb.saveLink(item.slug, item);
-          }
-        }}
-      />
     </div>
   );
 
@@ -729,12 +723,6 @@ export const LinksTable: React.FC<LinksTableProps> = ({
               {link.standNumber && (
                 <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 border border-neutral-300 dark:border-neutral-700">
                   {link.standNumber}
-                </span>
-              )}
-              {link.targetMockup && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 inline-flex items-center gap-1">
-                  <span>{MOCKUP_LABELS[link.targetMockup]?.icon || '🏷️'}</span>
-                  <span>{MOCKUP_LABELS[link.targetMockup]?.label || link.targetMockup}</span>
                 </span>
               )}
             </div>
@@ -831,42 +819,13 @@ export const LinksTable: React.FC<LinksTableProps> = ({
             </button>
           )}
 
-          {onOpenMockup && (
-            <button
-              onClick={() => onOpenMockup(link)}
-              className="inline-flex items-center gap-1 py-1.5 px-2.5 text-xs font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 rounded-xl active:bg-amber-100"
-              title="Preview physical standee mockup"
-            >
-              <Eye className="w-3.5 h-3.5 text-amber-500" />
-              <span>Mockup</span>
-            </button>
-          )}
-
-          {onOpenNFC && (
-            <button
-              onClick={() => onOpenNFC(link)}
-              className="inline-flex items-center gap-1 py-1.5 px-2.5 text-xs font-bold text-cyan-800 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-950/50 border border-cyan-300 dark:border-cyan-800 rounded-xl active:bg-cyan-100"
-              title="Program NFC Tag"
-            >
-              <Radio className="w-3.5 h-3.5 text-cyan-500" />
-              <span>NFC</span>
-            </button>
-          )}
-
-          <button
-            onClick={() => onOpenQR(link)}
-            className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 text-xs font-bold text-neutral-800 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl active:bg-neutral-200"
-          >
-            <QrCode className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-            <span>Studio</span>
-          </button>
-
           <button
             onClick={() => onOpenPrint(link)}
-            className="p-1.5 text-neutral-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl active:bg-neutral-200 shrink-0"
+            className="inline-flex items-center gap-1.5 py-1.5 px-3 text-xs font-bold text-neutral-800 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl active:bg-neutral-200"
             title="Print A4 Display Sheet"
           >
-            <Printer className="w-4 h-4" />
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print Sheet</span>
           </button>
 
           <button
@@ -930,12 +889,6 @@ export const LinksTable: React.FC<LinksTableProps> = ({
             {link.standNumber && (
               <span className="text-[10px] font-mono font-bold bg-neutral-200 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700">
                 {link.standNumber}
-              </span>
-            )}
-            {link.targetMockup && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 inline-flex items-center gap-1">
-                <span>{MOCKUP_LABELS[link.targetMockup]?.icon || '🏷️'}</span>
-                <span>{MOCKUP_LABELS[link.targetMockup]?.label || link.targetMockup}</span>
               </span>
             )}
           </div>
@@ -1024,40 +977,16 @@ export const LinksTable: React.FC<LinksTableProps> = ({
           )}
         </td>
 
-        {/* Column 6: QR Studio, Mockup, NFC & Delete */}
-        <td className="px-5 py-3.5 text-center">
-          <div className="inline-flex items-center gap-1.5">
-            {onOpenMockup && (
-              <button
-                type="button"
-                onClick={() => onOpenMockup(link)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-colors shadow-2xs whitespace-nowrap"
-                title="Live physical mockup preview (table tent, acrylic standee, window decal)"
-              >
-                <Eye className="w-3.5 h-3.5 text-amber-500" />
-                <span>Mockup</span>
-              </button>
-            )}
-
-            {onOpenNFC && (
-              <button
-                type="button"
-                onClick={() => onOpenNFC(link)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-cyan-800 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-950/50 border border-cyan-300 dark:border-cyan-800 rounded-lg hover:bg-cyan-100 dark:hover:bg-cyan-900/60 transition-colors shadow-2xs whitespace-nowrap"
-                title="Program physical NFC chip on acrylic stand"
-              >
-                <Radio className="w-3.5 h-3.5 text-cyan-500" />
-                <span>NFC</span>
-              </button>
-            )}
-
+        {/* Column 6: Actions */}
+        <td className="px-5 py-3.5 text-right">
+          <div className="inline-flex items-center justify-end gap-2">
             <button
-              onClick={() => onOpenQR(link)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-neutral-800 dark:text-neutral-200 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors shadow-2xs whitespace-nowrap"
-              title="Open QR Studio to customize & export"
+              onClick={() => onOpenPrint(link)}
+              title="Print A4 Display Sheet"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-neutral-800 dark:text-neutral-200 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors shadow-2xs whitespace-nowrap"
             >
-              <QrCode className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span>Studio</span>
+              <Printer className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Print Sheet</span>
             </button>
 
             <button
@@ -1066,24 +995,13 @@ export const LinksTable: React.FC<LinksTableProps> = ({
                   onDeleteLink(link.id);
                 }
               }}
-              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/50 hover:bg-red-100 border border-red-200 dark:border-red-900 rounded-lg transition-colors whitespace-nowrap shadow-2xs"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/50 hover:bg-red-100 border border-red-200 dark:border-red-900 rounded-lg transition-colors whitespace-nowrap shadow-2xs"
               title="Delete this QR code"
             >
               <Trash2 className="w-3.5 h-3.5 text-red-500" />
-              <span>Delete QR</span>
+              <span>Delete</span>
             </button>
           </div>
-        </td>
-
-        {/* Column 7: Print Sheet */}
-        <td className="px-5 py-3.5 text-right">
-          <button
-            onClick={() => onOpenPrint(link)}
-            title="Printable A4 Sheet"
-            className="p-1.5 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md transition-colors"
-          >
-            <Printer className="w-4 h-4" />
-          </button>
         </td>
       </tr>
     );

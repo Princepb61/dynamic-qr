@@ -27,6 +27,8 @@ import {
   Grid3X3,
   Lock,
   KeyRound,
+  FolderArchive,
+  Archive,
 } from 'lucide-react';
 import {
   getLast4Letters,
@@ -36,6 +38,7 @@ import {
   isMobileDevice,
   printLabelPresetBatch,
 } from '../utils/a4QrHelper';
+import { exportBatchQRsAsZip, BatchZipProgress } from '../utils/batchZipHelper';
 import { DESTINATION_TEMPLATES, DestinationTemplate } from '../utils/destinationTemplates';
 
 interface BatchPrintPageProps {
@@ -94,6 +97,8 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
   const [isPrintingSheet, setIsPrintingSheet] = useState(false);
   const [isSharingMulti, setIsSharingMulti] = useState(false);
   const [multiShareFeedback, setMultiShareFeedback] = useState<string | null>(null);
+  const [isZippingBatch, setIsZippingBatch] = useState(false);
+  const [zipProgress, setZipProgress] = useState<BatchZipProgress | null>(null);
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
@@ -319,6 +324,27 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
       window.print();
     } finally {
       setIsPrintingSheet(false);
+    }
+  };
+
+  // Download Batch Individual QR Code PNGs in a ZIP Archive (Link Code Only, No URLs)
+  const handleDownloadBatchZip = async (batchNameToUse?: string, linksToExport?: LinkRecord[]) => {
+    const targetLinks = linksToExport && linksToExport.length > 0 ? linksToExport : generatedBatchLinks;
+    if (targetLinks.length === 0) return;
+    try {
+      setIsZippingBatch(true);
+      const name = batchNameToUse || batchName.trim() || 'Batch_QR_Codes';
+      await exportBatchQRsAsZip(name, targetLinks, (p) => {
+        setZipProgress(p);
+      });
+      setTimeout(() => {
+        setZipProgress(null);
+      }, 4000);
+    } catch (err: any) {
+      console.error('Failed to download batch ZIP:', err);
+      alert(err.message || 'Could not export batch ZIP.');
+    } finally {
+      setIsZippingBatch(false);
     }
   };
 
@@ -583,8 +609,21 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                       </button>
                       <button
                         type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const bLinks = links.filter((l) => l.batchId === b.id);
+                          handleDownloadBatchZip(b.name, bLinks);
+                        }}
+                        disabled={isZippingBatch}
+                        className="p-1.5 text-neutral-400 hover:text-amber-400 rounded-lg hover:bg-neutral-800 transition-colors ml-1"
+                        title="Download Batch ZIP (PNGs)"
+                      >
+                        <FolderArchive className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleDeleteBatch(b.id)}
-                        className="p-1.5 text-neutral-500 hover:text-red-400 rounded-lg hover:bg-neutral-800 transition-colors ml-2"
+                        className="p-1.5 text-neutral-500 hover:text-red-400 rounded-lg hover:bg-neutral-800 transition-colors ml-1"
                         title="Delete Batch"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -621,7 +660,7 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                       {isSharingMulti ? 'Opening AirPrint...' : 'AirPrint / Save'}
                     </button>
 
-                    {/* Download PNG */}
+                    {/* Download Multi-Sheet PNG */}
                     <button
                       type="button"
                       onClick={handleDownloadMultiQRA4}
@@ -629,7 +668,19 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                       className="min-h-[40px] px-3.5 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
                     >
                       <Download className="w-3.5 h-3.5 text-neutral-400" />
-                      PNG Image
+                      Sheet Image
+                    </button>
+
+                    {/* Download Batch ZIP with Individual PNGs (Link Code Only, No URLs) */}
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadBatchZip()}
+                      disabled={isZippingBatch || generatedBatchLinks.length === 0}
+                      className="min-h-[40px] px-3.5 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-750 border border-amber-500/30 text-amber-300 hover:text-amber-200 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 shadow-xs"
+                      title="Download individual 300 DPI PNG images with link code in a ZIP file"
+                    >
+                      <FolderArchive className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{isZippingBatch ? `Exporting ZIP (${zipProgress?.percent || 0}%)...` : 'Download ZIP (PNGs)'}</span>
                     </button>
 
                     {/* Clean A4 Print Button */}
@@ -644,6 +695,19 @@ export const BatchPrintPage: React.FC<BatchPrintPageProps> = ({
                     </button>
                   </div>
                 </div>
+
+                {/* Batch ZIP Export Progress Banner */}
+                {zipProgress && (
+                  <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 flex items-center justify-between gap-3 animate-in fade-in">
+                    <div className="flex items-center gap-2.5">
+                      <FolderArchive className="w-4 h-4 text-amber-400 animate-pulse shrink-0" />
+                      <span className="font-medium">{zipProgress.statusText}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-mono font-black text-amber-300">{zipProgress.percent}%</span>
+                    </div>
+                  </div>
+                )}
 
                 {multiShareFeedback && (
                   <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-xs text-indigo-300 flex items-center gap-2">

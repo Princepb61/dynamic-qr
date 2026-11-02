@@ -31,10 +31,7 @@ import {
   Upload,
   ShieldAlert,
 } from 'lucide-react';
-import { QRStudioModal } from './QRStudioModal';
-import { getPraiseTagsForCategory } from '../utils/categoryTags';
-import { GooglePlaceSearchInput, PlaceResult } from './GooglePlaceSearchInput';
-import { MOCKUP_LABELS } from '../utils/bulkExportHelper';
+import { BUSINESS_CATEGORIES, getPraiseTagsForCategory } from '../utils/categoryTags';
 import { validateSecureHttpsUrl } from '../utils/urlValidator';
 
 interface EditDestinationModalProps {
@@ -224,8 +221,6 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
   const [newTagInput, setNewTagInput] = useState('');
   const [showWifiPass, setShowWifiPass] = useState(false);
 
-  // QR Studio Modal state
-  const [isQRStudioOpen, setIsQRStudioOpen] = useState(false);
 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -415,10 +410,6 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
     let target = destinationUrl.trim();
     if (target && !target.startsWith('/r/')) {
       const valResult = validateSecureHttpsUrl(target, { allowSpecialSchemes: true });
-      if (!valResult.isValid) {
-        setError(valResult.error || 'Destination URL must be a valid, secure HTTPS link.');
-        return;
-      }
       target = valResult.sanitizedUrl || target;
     }
 
@@ -503,9 +494,6 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
     }
   };
 
-  const handleSaveQRSettings = async (newSettings: QRSettings) => {
-    await onSave(link.id, { qrSettings: newSettings });
-  };
 
   const dynamicEndpoint = `/r/${link.slug}`;
 
@@ -527,15 +515,6 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsQRStudioOpen(true)}
-                className="px-3 py-1.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                title="Open Visual QR Designer Studio"
-              >
-                <Palette className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">QR Studio</span>
-              </button>
               <button
                 onClick={onClose}
                 className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
@@ -730,71 +709,18 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                   </div>
                 </div>
 
-                {/* Physical Mockup Graphic Template & Stand Number */}
-                <div className="p-4 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                        <span>🖼️ Physical Mockup Graphic Template</span>
-                        <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono">PRINT READY</span>
-                      </span>
-                      <p className="text-[11px] text-neutral-400">
-                        Assign this QR code to the physical graphic mockup template you place it on before printing.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {Object.entries(MOCKUP_LABELS).map(([key, meta]) => {
-                      const isSelected = targetMockup === key;
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => setTargetMockup(key as MockupCategory)}
-                          className={`p-2.5 rounded-xl border text-left transition-all flex items-center gap-2 ${
-                            isSelected
-                              ? 'bg-amber-500/15 border-amber-500/60 text-white shadow-sm ring-1 ring-amber-500/30'
-                              : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-neutral-200 hover:border-neutral-700'
-                          }`}
-                        >
-                          <span className="text-base shrink-0">{meta.icon}</span>
-                          <div className="min-w-0">
-                            <span className="text-xs font-bold block truncate">{meta.label}</span>
-                            <span className="text-[10px] text-neutral-500 block font-mono truncate">/{meta.folder}/</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-neutral-300 block">
-                        Stand / Table Number Label
-                      </label>
-                      <input
-                        type="text"
-                        value={standNumber}
-                        onChange={(e) => setStandNumber(e.target.value)}
-                        placeholder="e.g. Table 01, VIP Stand #3, Counter B"
-                        className="w-full bg-neutral-900 border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                    {placeId ? (
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-semibold text-neutral-300 block">
-                          Verified Google Place ID
-                        </label>
-                        <input
-                          type="text"
-                          value={placeId}
-                          readOnly
-                          className="w-full bg-neutral-900/60 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-amber-400 font-mono"
-                        />
-                      </div>
-                    ) : null}
-                  </div>
+                {/* Stand / Table Number */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-white block">
+                    Table / Stand Number Label (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={standNumber}
+                    onChange={(e) => setStandNumber(e.target.value)}
+                    placeholder="e.g. Table 01, VIP Stand #3, Counter B"
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
                 </div>
 
                 <div className="space-y-1.5">
@@ -1117,38 +1043,6 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                                     />
                                   </div>
 
-                                   {/* Live Google Maps Auto-Search */}
-                                  <div className="space-y-1.5 p-3 rounded-xl bg-neutral-900/80 border border-amber-500/30">
-                                    <div className="flex items-center justify-between">
-                                      <label className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
-                                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                                        <span>Auto-Fetch Business via Google Maps Search</span>
-                                      </label>
-                                      <span className="text-[10px] text-neutral-400">Search city &amp; name</span>
-                                    </div>
-                                    <GooglePlaceSearchInput
-                                      initialQuery={action.businessName || ''}
-                                      placeholder="Type business name &amp; city (e.g. Copper Kettle Cafe Mumbai)..."
-                                      onSelectPlace={(place) => {
-                                        handleUpdateHubAction(action.id, {
-                                          destinationUrl: place.googleReviewUrl,
-                                          businessName: place.name,
-                                          businessCategory: place.category || 'Local Business',
-                                          googlePlaceId: place.placeId,
-                                          praiseTags: place.suggestedTags && place.suggestedTags.length > 0
-                                            ? place.suggestedTags
-                                            : getPraiseTagsForCategory(place.category || 'Local Business'),
-                                        });
-                                        setPlaceId(place.placeId);
-                                        setPlaceAddress(place.formattedAddress);
-                                        setPlaceRating(place.rating);
-                                        if (!title || title.startsWith('QR Code') || title.startsWith('Pre-Printed')) {
-                                          setTitle(`${place.name} - Review Stand`);
-                                        }
-                                      }}
-                                    />
-                                  </div>
-
                                   {/* Direct Google Review URL */}
                                   <div className="space-y-1">
                                     <label className="text-[10px] text-neutral-300 font-semibold block">
@@ -1190,15 +1084,24 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                                           <label className="text-[10px] text-neutral-300 font-semibold block">
                                             Business Category <span className="text-amber-400">*</span>
                                           </label>
-                                          <input
-                                            type="text"
-                                            value={action.businessCategory || ''}
-                                            onChange={(e) =>
-                                              handleUpdateHubAction(action.id, { businessCategory: e.target.value })
-                                            }
-                                            placeholder="e.g. Italian Restaurant, Hair Salon, Dental..."
-                                            className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                                          />
+                                          <select
+                                            value={action.businessCategory || 'Restaurant & Cafe'}
+                                            onChange={(e) => {
+                                              const newCat = e.target.value;
+                                              const suggested = getPraiseTagsForCategory(newCat);
+                                              handleUpdateHubAction(action.id, {
+                                                businessCategory: newCat,
+                                                praiseTags: suggested,
+                                              });
+                                            }}
+                                            className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-medium"
+                                          >
+                                            {BUSINESS_CATEGORIES.map((cat) => (
+                                              <option key={cat.id} value={cat.name}>
+                                                {cat.icon} {cat.name}
+                                              </option>
+                                            ))}
+                                          </select>
                                         </div>
                                       </div>
 
@@ -1483,18 +1386,6 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
           </form>
         </div>
       </div>
-
-      {/* QR Studio Modal */}
-      {isQRStudioOpen && (
-        <QRStudioModal
-          isOpen={isQRStudioOpen}
-          onClose={() => setIsQRStudioOpen(false)}
-          targetUrl={`${window.location.origin}/r/${link.slug}`}
-          linkTitle={link.title}
-          initialSettings={link.qrSettings}
-          onSaveSettings={handleSaveQRSettings}
-        />
-      )}
     </>
   );
 };

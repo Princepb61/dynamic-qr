@@ -1,34 +1,22 @@
-# TapLocal Live Google Maps Search & Print Shop Mockup Exporter
+# Batch QR Codes PNG & ZIP Export (Link Code Only, No Short Link)
 
-Deliver an integrated Live Google Maps Place Auto-Search tool and a tailored Bulk Print Shop Export system organized specifically for multi-mockup physical production (Google Reviews standees, Digital Menu table-tents, WhatsApp placards, Instagram & Facebook social cards).
+Export batch dynamic QR codes into a ZIP file containing high-resolution 300 DPI PNG cards. Each image renders the clean QR code with **only the batch link code** (e.g. `CODE: #A1B2`) printed underneath—**without any short link or URL printed** on the image.
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> The following critical product decisions have been incorporated based on your production workflow:
-
-- **Mockup-Centric Organization**: Because you place individual QR codes into pre-designed graphic mockups (Google Reviews, Menu, WhatsApp, Facebook, Instagram) before printing, the Bulk Export will organize QR files into categorized folders (`/Google_Reviews/`, `/Digital_Menus/`, `/WhatsApp_Placards/`, `/Instagram_Cards/`, `/Facebook_Stands/`, `/Smart_Hub/`) with transparent high-resolution PNGs (300 DPI equivalent) and scalable vector SVGs.
-- **Pre-Print Mockup Assignment**: Each QR link and batch item will have a visible **Target Mockup Template** selector so you can tag which physical graphic template each QR belongs to (e.g., Table 01 -> Google Review Stand, Table 02 -> Menu Card).
-- **Print Shop Production Manifest (CSV)**: Generates a standardized print shop spreadsheet listing `Filename`, `Table/Stand Number`, `Target Mockup`, `QR Slug`, `Permanent Short URL`, `Destination Summary`, and `Batch Name` for easy merge into Adobe Illustrator, Photoshop, InDesign, CorelDraw, or laser engraving/vinyl cutters.
-- **Live Google Maps Place Auto-Search**: Live autocomplete & business search by name and city/area to automatically fetch Place ID, official direct review submission URL (`https://search.google.com/local/writereview?placeid=...`), business rating, address, and category without manual URL hunting.
+> The following user preferences are incorporated into this plan:
+> - **No Short Link Printed**: Each generated PNG image strictly contains the sharp QR code and the bold link code text (e.g., `#A1B2` or `CODE: #A1B2`). No URL or short link (`/r/...` or domain) will be printed on the card canvas.
+> - **PNG File Naming**: Files inside the ZIP archive are formatted as `[LINK-CODE]_[TITLE].png` (e.g., `A1B2_Table_01_Menu.png`), with fallback to `[LINK-CODE]_QR.png` if unassigned.
+> - **UI Action Placements**: The "Download Batch PNGs (ZIP)" action is placed directly in the **Batch Print** header/toolbar AND on every batch group card in the **Links & QR Roster** table.
 
 ---
 
 ## 1. Overview & Core Concept
 
-TapLocal connects dynamic physical QR hardware with digital destinations. To bridge the gap between digital setup and physical print production:
-1. **Live Google Maps Place Auto-Search**: Business owners or print agents can type a business name and location (e.g., "Grand Royal Cafe, Connaught Place"). The system auto-fills the verified Google Place ID, official direct review submission URL, rating, category, and street address.
-2. **Pre-Print Mockup Categorization**: In the dynamic links table and batch view, users can tag or batch-assign each QR code to its designated physical mockup:
-   - 🌟 **Google Review Standee** (Acrylic table stand / cash register plate)
-   - 🍽️ **Digital Menu Card** (Dining table tent / laminated card)
-   - 💬 **WhatsApp Help / Order Desk** (Customer service stand)
-   - 📸 **Instagram / Facebook Follow** (Wall sticker / counter tent)
-   - 🎛️ **Multi-Action Smart Hub** (All-in-one comprehensive table plate)
-3. **Bulk Print Shop Exporter**: Generates a single production-ready ZIP archive containing:
-   - Categorized subfolders per mockup type.
-   - High-resolution transparent PNGs (1024×1024) and lossless vector SVGs ready for direct drag-and-drop into mockup PSDs/AIs.
-   - A laser-cutting & print operator CSV manifest.
-   - An on-screen printable A4 Sheet / Grid Proofing view showing mockup labels alongside QR codes for quality checks before running print presses.
+- **What It Does**: Allows administrators and clients to download an entire batch of dynamic QR codes in one click as a ZIP file. Each QR code is packaged as an individual high-resolution PNG image with only its unique link code printed directly below the code, suitable for acrylic standee makers, laser engravers, or print shops where URLs should not be visible.
+- **Target Audience**: Business owners, marketing teams, and print vendors who need clean QR images identified solely by their link code.
+- **Key Value**: Clean, uncluttered physical presentation; users only see the QR pattern and its reference code.
 
 ---
 
@@ -36,136 +24,74 @@ TapLocal connects dynamic physical QR hardware with digital destinations. To bri
 
 ### Key User Flows
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 1. Business Setup with Live Google Maps Search                              │
-│    Owner types "Spice Court Jaipur" -> Selects verified Google Place        │
-│    -> Auto-fills: Place ID, Direct Review URL, Category, Address, Rating   │
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 2. Pre-Print Mockup Assignment                                              │
-│    Owner assigns Target Mockup per QR or entire batch:                      │
-│    [x] Google Review Stand  [ ] Digital Menu  [ ] WhatsApp  [ ] Instagram   │
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 3. Bulk Print Shop Export Modal                                             │
-│    - Select Batch or Custom Filter (by Mockup, Location, or Tag)            │
-│    - Choose Formats: Transparent High-Res PNG + SVG Vectors + Print CSV     │
-│    - Preview Mockup Production Sheet & Download Structured ZIP              │
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 4. Output ZIP File Structure for Graphic Designers & Print Shops            │
-│    ├── manifest_print_shop.csv                                              │
-│    ├── 📁 Google_Reviews/                                                   │
-│    │    ├── Table-01_[GoogleReviews]_stock-01.png                           │
-│    │    └── Table-01_[GoogleReviews]_stock-01.svg                           │
-│    ├── 📁 Digital_Menu/                                                     │
-│    │    └── Table-02_[DigitalMenu]_stock-02.png                             │
-│    ├── 📁 WhatsApp_Placard/                                                 │
-│    ├── 📁 Social_Media_Cards/                                               │
-│    └── print_proofing_sheet.html (Standalone visual proofing preview)       │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+1. **Batch Print Tab Download**:
+   - The user opens the "Batch Print & Inventory" tab.
+   - Beside the existing "Print A4 Sheet" and "Grid Density" controls, a primary button labeled **"Download Batch PNGs (ZIP)"** with a folder/archive icon is available.
+   - When clicked, a progress indicator displays real-time generation progress (e.g., `"Rendering QR 4 of 24 (16%)..."`).
+   - Once completed, the browser automatically triggers the download of `[BatchName]_QRCodes.zip`.
 
-### Visual Identity & Theme
-- **Theme**: SaaS utilitarian dark interface (`bg-neutral-950` canvas, `bg-neutral-900` card surfaces, `border-neutral-800` subtle elevation dividers).
-- **Mockup Badge Colors**: Distinctive, low-saturation category accents for quick visual identification:
-  - Google Reviews: Amber/Gold accent (`text-amber-400 bg-amber-950/40 border-amber-800/50`)
-  - Digital Menu: Emerald/Green accent (`text-emerald-400 bg-emerald-950/40 border-emerald-800/50`)
-  - WhatsApp: Teal/Green accent (`text-teal-400 bg-teal-950/40 border-teal-800/50`)
-  - Instagram & Facebook: Violet/Sky accent (`text-indigo-400 bg-indigo-950/40 border-indigo-800/50`)
-  - Smart Hub: Purple accent (`text-purple-400 bg-purple-950/40 border-purple-800/50`)
-- **Typography**: Plus Jakarta Sans for UI controls, JetBrains Mono / tabular numbers (`font-mono`) for slugs, filenames, coordinates, and batch counters.
+2. **Links Table Batch Group Download**:
+   - In the "Dynamic Links & QR Roster" table, each batch folder/group header shows a dedicated button: **"Download ZIP (PNGs)"**.
+   - Clicking downloads all links belonging to that specific batch in seconds.
+
+3. **High-Resolution PNG Canvas Spec (No URLs)**:
+   - Dimensions: 1024 × 1140 px (300 DPI crisp output).
+   - Top / Center: Clean QR code with adequate quiet margin (32px padding).
+   - Bottom Center Label:
+     - Prominent bold link code (e.g., `CODE: #D8K2`) in dark monospace tabular font (`font-bold text-2xl`).
+     - **No short link or URL printed on the image canvas**.
 
 ---
 
-## 3. Key Product Decisions & Trade-Offs
+## 3. Technical Architecture & Implementation Details
 
-- **Hierarchical Mockup ZIP Structure**:
-  - *Chosen Approach*: Group exported QR assets into subfolders matching mockup types (`/Google_Reviews/`, `/Digital_Menu/`, etc.) with transparent backgrounds and clear descriptive filenames (e.g. `Stand-01_GoogleReview_slug.png`).
-  - *Why*: Solves the user's primary bottleneck: placing different QRs into different graphic templates in Photoshop/Illustrator without mixing up destinations or table numbers.
-- **Client-Side ZIP Generation (`jszip`)**:
-  - *Chosen Approach*: Generate the ZIP and high-res canvas exports directly in the browser using `jszip` and pure SVG/Canvas rasterizers.
-  - *Why*: Instant download with zero server latency, works completely offline, and handles batches of hundreds of QR codes without memory spikes on the backend.
-- **Hybrid Google Maps Search**:
-  - *Chosen Approach*: Provide a server proxy endpoint (`/api/places/search`) utilizing Google Places API / Maps integration to return structured place metadata (Place ID, official name, address, rating, and direct review URL `https://search.google.com/local/writereview?placeid={place_id}`).
-  - *Why*: Prevents CORS issues on client-side requests, keeps API keys secure, and guarantees users get genuine verified Place IDs.
+```
+┌────────────────────────────────────────────────────────┐
+│ UI Layer: BatchPrintPage.tsx & LinksTable.tsx          │
+│ ┌────────────────────────┐  ┌────────────────────────┐ │
+│ │ Batch Print Tab Button │  │ Group Row ZIP Button   │ │
+│ └───────────┬────────────┘  └───────────┬────────────┘ │
+└─────────────┼───────────────────────────┼──────────────┘
+              │                           │
+              ▼                           ▼
+┌────────────────────────────────────────────────────────┐
+│ batchZipHelper.ts (Client-side fast generation)        │
+│ ┌────────────────────────────────────────────────────┐ │
+│ │ 1. Loop through links array in batch               │ │
+│ │ 2. Canvas: render QR code at high resolution       │ │
+│ │ 3. Draw clean footer with ONLY bold Link Code      │ │
+│ │    (Explicitly omitting any short URLs or links)   │ │
+│ │ 4. Export canvas to PNG Blob                       │ │
+│ │ 5. Add to JSZip instance: [CODE]_[TITLE].png       │ │
+│ │ 6. jszip.generateAsync({ type: 'blob' })           │ │
+│ │ 7. Trigger browser file download                   │ │
+│ └────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────┘
+```
+
+### File Changes
+
+1. **`src/utils/batchZipHelper.ts` (New)**:
+   - Implements `exportBatchQRsAsZip(batchName: string, links: LinkRecord[], onProgress?: (percent: number, current: number, total: number) => void): Promise<void>`.
+   - Uses `qrcode` and HTML5 canvas to render crisp PNG cards with ONLY the bold link code printed underneath (no URLs).
+   - Packages all PNGs into a ZIP using `jszip` (already in `package.json`).
+   - Downloads the ZIP file directly to the client's device without server load.
+
+2. **`src/components/BatchPrintPage.tsx`**:
+   - Add "Download ZIP (PNGs)" button to the batch generation / inventory action bars.
+   - Wire generation progress state so users see instant visual feedback.
+
+3. **`src/components/LinksTable.tsx`**:
+   - In batch group headers, add a compact "Download ZIP" action alongside the existing print sheet action.
+
+4. **`src/components/ClientRedirectHandler.tsx` Fix**:
+   - Remove the orphaned condition leftover around line 647 that caused the earlier compilation error so the build remains 100% clean.
 
 ---
 
-## 4. Technical Architecture & Data Strategy
+## 4. Verification Plan
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           TAPLOCAL EXPORT & SEARCH ENGINE                   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│   [ Client Browser ]                                                        │
-│   ├── LinksTable & BatchFolders (Mockup Type Selector & Batch Tagging)      │
-│   ├── EditDestinationModal & CreateLinkModal (Google Maps Place Search)     │
-│   └── BulkPrintShopModal (Export Configurator)                              │
-│       ├── JSZip Archiver (Builds multi-folder ZIP archive)                  │
-│       ├── Canvas/SVG Renderer (Generates transparent 1000px PNGs & SVGs)    │
-│       └── CSV Exporter (Builds laser-cut & print shop manifest)             │
-│                                      │                                      │
-│                                      ▼                                      │
-│   [ Express Server (server.ts) ]                                            │
-│   ├── GET /api/places/search?query=... (Google Maps Place Auto-Search)      │
-│   └── POST /api/ai/generate-review (Multilingual Gemini 3.8 Flash Reviews)  │
-│                                      │                                      │
-│                                      ▼                                      │
-│   [ Persistence Layer (localDb.ts & firestoreDb.ts) ]                       │
-│   └── LinkRecord.targetMockup: 'google_review' | 'menu' | 'whatsapp' |      │
-│                               'facebook' | 'instagram' | 'smart_hub'        │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Data Model Enhancements
-
-```ts
-export type MockupCategory = 
-  | 'google_review'      // Physical acrylic review standee / sticker
-  | 'digital_menu'       // Table tent / laminated food & drink card
-  | 'whatsapp_order'     // Help desk / order inquiry card
-  | 'instagram_follow'   // Social media sticker
-  | 'facebook_community' // Social media stand
-  | 'smart_hub'          // All-in-one multi-action plate
-  | 'custom';            // General purpose
-
-export interface LinkRecord {
-  // Existing fields
-  slug: string;
-  destinationUrl: string;
-  title: string;
-  batchId?: string;
-  tags?: string[];
-  
-  // New print & mockup fields
-  targetMockup?: MockupCategory;
-  standNumber?: string; // e.g. "Table 01", "Counter A", "Stand #4"
-  placeId?: string;
-  placeAddress?: string;
-  placeRating?: number;
-}
-```
-
-### Execution Phases Upon Approval
-1. **Package Installation**: Install `jszip` and `@types/jszip` via `install_applet_package`.
-2. **Server Search Endpoint**: Add `/api/places/search` in `server.ts` to power the live Google Maps Place auto-search.
-3. **Data Model & Mockup Assignment UI**:
-   - Add `targetMockup` and `standNumber` support to `types.ts`, `localDb.ts`, and `firestoreDb.ts`.
-   - Add Mockup Selector chip control into `LinksTable.tsx`, `CreateLinkModal.tsx`, and `EditDestinationModal.tsx`.
-4. **Google Maps Place Search Component**:
-   - Embed search input with instant autocomplete results in `EditDestinationModal.tsx` and `CreateLinkModal.tsx`.
-   - Auto-fill business title, Google Place ID, and official review URL upon place selection.
-5. **Bulk Print Shop Export Modal**:
-   - Create `BulkPrintShopModal.tsx` with batch selection, mockup folder previews, format toggles (PNG, SVG, CSV, Proof Sheet), and 1-click ZIP generation.
-   - Generate production-ready CSV manifest for print shops and laser engravers.
-6. **Verification**: Run `compile_applet` and test end-to-end export and search flows.
+1. Verify build compilation using `compile_applet`.
+2. Test generating a batch in Batch Print tab and clicking "Download Batch PNGs (ZIP)".
+3. Verify that the downloaded ZIP contains individual PNG files named `[CODE]_[Title].png` with sharp QR codes and ONLY the link code printed below (no URL).
+4. Test clicking "Download ZIP" on batch groups in the Links Table.

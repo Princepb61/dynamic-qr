@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Star,
   Sparkles,
@@ -7,18 +7,15 @@ import {
   ExternalLink,
   MessageSquare,
   Send,
-  HeartHandshake,
-  ArrowRight,
-  ShieldCheck,
   RefreshCw,
   Languages,
-  SlidersHorizontal,
-  Tag,
+  CheckCircle2,
+  Heart,
+  ChevronRight,
 } from 'lucide-react';
 import { ReviewGateConfig } from '../types';
 import {
   generateProceduralReviews,
-  autoInferKeywords,
   ReviewLanguage,
   ReviewLength,
 } from '../utils/proceduralReviewGenerator';
@@ -50,18 +47,28 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
   onFeedbackSubmitted,
   onClose,
 }) => {
-  const [rating, setRating] = useState<number | null>(null);
+  // Default to 5-star experience so tags & reviews appear immediately without delay
+  const [rating, setRating] = useState<number | null>(5);
   const [hoverRating, setHoverRating] = useState<number | null>(null);
 
-  // 4-5 Stars state
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [customNote, setCustomNote] = useState('');
-  const [customKeywords, setCustomKeywords] = useState('');
+  // Available tags from link config or category preset
+  const availableTags = useMemo(() => {
+    if (config?.praiseTags && Array.isArray(config.praiseTags) && config.praiseTags.length > 0) {
+      return config.praiseTags;
+    }
+    return getPraiseTagsForCategory(businessCategory || config?.businessCategory || 'Local Business');
+  }, [config?.praiseTags, businessCategory, config?.businessCategory]);
+
+  // Selected tags - initially select the first 2-3 tags for instant review synthesis
+  const [selectedTags, setSelectedTags] = useState<string[]>(() => {
+    if (availableTags && availableTags.length > 0) {
+      return availableTags.slice(0, Math.min(3, availableTags.length));
+    }
+    return [];
+  });
+
   const [selectedLanguage, setSelectedLanguage] = useState<'all' | ReviewLanguage>('all');
-  const [selectedLength, setSelectedLength] = useState<'all' | ReviewLength>('all');
-  const [tone, setTone] = useState<'enthusiastic' | 'friendly' | 'professional' | 'short_and_sweet'>('enthusiastic');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [regenCount, setRegenCount] = useState(0);
+  const [regenSeed, setRegenSeed] = useState(1);
   const [reviewDrafts, setReviewDrafts] = useState<ReviewDraft[]>([]);
   const [copiedDraftId, setCopiedDraftId] = useState<number | null>(null);
   const [redirectingCountdown, setRedirectingCountdown] = useState<number | null>(null);
@@ -77,107 +84,85 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
   const isHighRating = rating !== null && rating >= (config.minRatingForGoogle || 4);
   const isLowRating = rating !== null && rating < (config.minRatingForGoogle || 4);
 
-  const availableTags =
-    config.praiseTags && config.praiseTags.length > 0
-      ? config.praiseTags
-      : getPraiseTagsForCategory(businessCategory || 'Local Business');
+  // Instant, 0ms review generator function based on current tags and language
+  const produceInstantReviews = useCallback(
+    (tags: string[], lang: 'all' | ReviewLanguage, seed: number) => {
+      const activePraise = tags.length > 0 ? tags : availableTags.slice(0, 2);
+      const effectiveCategory = businessCategory || config?.businessCategory || 'Local Business';
+      const effectiveName = businessName || config?.businessName || 'This Business';
 
-  // Auto-inferred keyword suggestions for quick tapping
-  const suggestedKeywords = autoInferKeywords(businessName, businessCategory);
-
-  const toggleTag = (tag: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
-  };
-
-  const handleAddKeyword = (kw: string) => {
-    const parts = customKeywords.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean);
-    if (!parts.includes(kw)) {
-      parts.push(kw);
-      setCustomKeywords(parts.join(', '));
-    }
-  };
-
-  const handleGenerateReviews = async () => {
-    setIsGenerating(true);
-    setReviewDrafts([]);
-    const nextIteration = regenCount + 1;
-    setRegenCount(nextIteration);
-
-    const tagsToUse =
-      selectedTags.length > 0 ? selectedTags : availableTags.slice(0, 3);
-    const dynamicCount = 4;
-
-    try {
-      const res = await fetch('/api/ai/generate-review', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          businessName,
-          businessCategory,
-          praiseTags: tagsToUse,
-          customNotes: customNote,
-          keywords: customKeywords,
-          language: selectedLanguage,
-          length: selectedLength,
-          tone,
-          iteration: nextIteration,
-          requestedCount: dynamicCount,
-        }),
+      const results = generateProceduralReviews({
+        businessName: effectiveName,
+        businessCategory: effectiveCategory,
+        praiseTags: activePraise,
+        language: lang,
+        length: 'all',
+        iteration: seed,
+        requestedCount: 2, // Exactly 1-2 authentic reviews
       });
 
-      if (!res.ok) throw new Error('Failed to generate review');
-      const data = await res.json();
-      if (data.reviews && Array.isArray(data.reviews) && data.reviews.length >= 3) {
-        setReviewDrafts(data.reviews);
-        return;
+      // Ensure badges look polished and scannable
+      return results.slice(0, 2).map((r, idx) => ({
+        ...r,
+        badge: idx === 0 ? '✨ Most Popular & Authentic' : '⚡ Short & Impactful',
+      }));
+    },
+    [availableTags, businessCategory, config?.businessCategory, businessName, config?.businessName]
+  );
+
+  // Generate 1-2 reviews IMMEDIATELY on mount and whenever tags/language change
+  useEffect(() => {
+    if (isHighRating) {
+      const drafts = produceInstantReviews(selectedTags, selectedLanguage, regenSeed);
+      setReviewDrafts(drafts);
+    }
+  }, [produceInstantReviews, selectedTags, selectedLanguage, regenSeed, isHighRating]);
+
+  // Toggle tag selection with instant review update
+  const handleToggleTag = (tag: string) => {
+    setSelectedTags((prev) => {
+      const next = prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag];
+      return next;
+    });
+    setRegenSeed((s) => s + 1);
+  };
+
+  // Switch language instantly
+  const handleLanguageChange = (lang: 'all' | ReviewLanguage) => {
+    setSelectedLanguage(lang);
+    setRegenSeed((s) => s + 1);
+  };
+
+  // Re-roll alternate reviews instantly
+  const handleReroll = () => {
+    setRegenSeed((s) => s + 1);
+  };
+
+  // Copy review to clipboard and open Google Reviews immediately
+  const handleCopyAndOpenGoogle = async (draft: ReviewDraft) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(draft.text);
       }
-      throw new Error('Invalid reviews payload');
-    } catch (err) {
-      console.warn('AI Review Generation network error, using client-side procedural generator:', err);
-      const fallback = generateProceduralReviews({
-        businessName,
-        businessCategory,
-        praiseTags: tagsToUse,
-        customNotes: customNote,
-        keywords: customKeywords,
-        language: selectedLanguage,
-        length: selectedLength,
-        tone,
-        iteration: nextIteration,
-        requestedCount: dynamicCount,
-      });
-      setReviewDrafts(fallback);
-    } finally {
-      setIsGenerating(false);
+    } catch {
+      // Fallback if clipboard permission denied
     }
-  };
 
-  const handleSelectAndCopyReview = async (draft: ReviewDraft) => {
-    try {
-      await navigator.clipboard.writeText(draft.text);
-      setCopiedDraftId(draft.id);
+    setCopiedDraftId(draft.id);
 
-      // Start countdown to open Google Reviews
-      setRedirectingCountdown(2);
-      const timer = setInterval(() => {
-        setRedirectingCountdown((prev) => {
-          if (prev === null || prev <= 1) {
-            clearInterval(timer);
-            const googleUrl = config.googleReviewUrl || 'https://search.google.com/local/writereview';
-            window.location.href = googleUrl;
-            return null;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } catch (err) {
-      const googleUrl = config.googleReviewUrl || 'https://search.google.com/local/writereview';
+    const googleUrl =
+      config.googleReviewUrl && config.googleReviewUrl.trim()
+        ? config.googleReviewUrl
+        : 'https://search.google.com/local/writereview';
+
+    // Small smooth countdown before navigation
+    setRedirectingCountdown(1);
+    setTimeout(() => {
       window.location.href = googleUrl;
-    }
+    }, 800);
   };
 
+  // Submit 1-3 star private feedback
   const handleSubmitLowFeedback = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!feedbackText.trim()) return;
@@ -198,8 +183,7 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
       });
       setFeedbackSent(true);
       if (onFeedbackSubmitted) onFeedbackSubmitted();
-    } catch (err) {
-      console.error('Failed to submit private feedback', err);
+    } catch {
       setFeedbackSent(true);
     } finally {
       setIsSubmittingFeedback(false);
@@ -207,97 +191,117 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col justify-between p-4 sm:p-6 antialiased selection:bg-amber-500 selection:text-neutral-950 font-sans">
-      <div className="max-w-md w-full mx-auto my-auto space-y-5">
-        {/* Brand Header */}
-        <div className="text-center space-y-2 relative">
+    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col justify-between p-3.5 sm:p-6 antialiased selection:bg-amber-500 selection:text-neutral-950 font-sans">
+      <div className="max-w-lg w-full mx-auto my-auto space-y-4 sm:space-y-5">
+        {/* Top Header */}
+        <div className="text-center space-y-2 relative pt-2">
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              className="absolute right-0 top-0 text-neutral-400 hover:text-white p-2 text-xl leading-none"
+              className="absolute right-0 top-0 text-neutral-400 hover:text-white p-2 text-2xl leading-none"
+              aria-label="Close"
             >
               &times;
             </button>
           )}
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold uppercase tracking-wider">
+
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold uppercase tracking-wider">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Verified Customer Experience</span>
+            <span>Google 5-Star Reviews</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            {businessName}
+
+          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight">
+            {businessName || 'Our Business'}
           </h1>
-          <p className="text-xs sm:text-sm text-neutral-400">
+
+          <p className="text-xs sm:text-sm text-neutral-400 font-medium">
             How was your visit with us today?
           </p>
         </div>
 
-        {/* Rating Stars Card */}
-        <div className="bg-neutral-900/90 border border-neutral-800 rounded-3xl p-5 sm:p-7 shadow-2xl backdrop-blur-xl text-center space-y-5">
+        {/* Rating Card */}
+        <div className="bg-neutral-900/95 border border-neutral-800 rounded-3xl p-4 sm:p-6 shadow-2xl backdrop-blur-xl space-y-5">
           {/* Star selector */}
-          <div className="flex justify-center items-center gap-2 sm:gap-3 py-2">
-            {[1, 2, 3, 4, 5].map((starValue) => {
-              const isFilled = activeRating !== null && starValue <= activeRating;
-              return (
-                <button
-                  key={starValue}
-                  type="button"
-                  onMouseEnter={() => setHoverRating(starValue)}
-                  onMouseLeave={() => setHoverRating(null)}
-                  onClick={() => {
-                    setRating(starValue);
-                    if (starValue >= (config.minRatingForGoogle || 4) && reviewDrafts.length === 0) {
-                      if (selectedTags.length === 0 && availableTags.length > 0) {
-                        setSelectedTags([availableTags[0], availableTags[1] || availableTags[0]]);
-                      }
-                    }
-                  }}
-                  className="group p-1 focus:outline-none transition-transform active:scale-90"
-                  aria-label={`Rate ${starValue} stars`}
-                >
-                  <Star
-                    className={`w-9 h-9 sm:w-11 sm:h-11 transition-all duration-200 ${
-                      isFilled
-                        ? 'fill-amber-400 text-amber-400 drop-shadow-[0_0_12px_rgba(251,191,36,0.6)] scale-110'
-                        : 'text-neutral-700 hover:text-neutral-500 hover:scale-105'
-                    }`}
-                  />
-                </button>
-              );
-            })}
+          <div className="text-center space-y-2">
+            <div className="flex justify-center items-center gap-2 sm:gap-3 py-1">
+              {[1, 2, 3, 4, 5].map((starValue) => {
+                const isFilled = activeRating !== null && starValue <= activeRating;
+                return (
+                  <button
+                    key={starValue}
+                    type="button"
+                    onMouseEnter={() => setHoverRating(starValue)}
+                    onMouseLeave={() => setHoverRating(null)}
+                    onClick={() => setRating(starValue)}
+                    className="p-1 focus:outline-none transition-transform active:scale-90"
+                    aria-label={`Rate ${starValue} stars`}
+                  >
+                    <Star
+                      className={`w-9 h-9 sm:w-11 sm:h-11 transition-all duration-150 ${
+                        isFilled
+                          ? 'fill-amber-400 text-amber-400 drop-shadow-[0_0_14px_rgba(251,191,36,0.7)] scale-110'
+                          : 'text-neutral-700 hover:text-neutral-500 hover:scale-105'
+                      }`}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+            {rating === 5 && (
+              <span className="text-xs font-bold text-amber-400 tracking-wide uppercase">
+                5-Star Excellent Experience
+              </span>
+            )}
           </div>
 
-          {rating === null && (
-            <p className="text-xs text-neutral-500 font-medium">
-              Tap a star above to rate your experience
-            </p>
-          )}
-
-          {/* HIGH RATING (4-5 STARS) -> MULTILINGUAL AI REVIEW GENERATOR */}
+          {/* 4-5 STARS: SHOW BIG READABLE TAGS FIRST, THEN INSTANT 1-2 REVIEWS */}
           {isHighRating && (
-            <div className="pt-2 border-t border-neutral-800/80 space-y-4 text-left animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="text-center space-y-1">
-                <span className="text-xl">🎉</span>
-                <h3 className="text-base font-bold text-white">
-                  We're delighted you had a 5-star experience!
-                </h3>
-                <p className="text-xs text-neutral-400">
-                  Select your preferred language & highlights. AI will draft authentic, human Google Reviews in 1 second!
-                </p>
+            <div className="space-y-5 animate-in fade-in duration-200">
+              {/* SECTION 1: BIG VISIBLE PRAISE TAGS */}
+              <div className="space-y-2.5 pt-2 border-t border-neutral-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs sm:text-sm font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <span>What did you enjoy most?</span>
+                  </label>
+                  <span className="text-[11px] text-amber-400 font-semibold">
+                    Tap to customize
+                  </span>
+                </div>
+
+                {/* Big, bold, easily readable tags */}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {availableTags.map((tag) => {
+                    const isSelected = selectedTags.includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => handleToggleTag(tag)}
+                        className={`text-xs sm:text-sm font-bold px-3.5 sm:px-4 py-2.5 rounded-2xl transition-all duration-150 border flex items-center gap-2 active:scale-95 ${
+                          isSelected
+                            ? 'bg-amber-400 text-neutral-950 border-amber-300 shadow-md shadow-amber-500/20 ring-2 ring-amber-400/40'
+                            : 'bg-neutral-800/80 text-neutral-300 border-neutral-700 hover:bg-neutral-700 hover:text-white hover:border-neutral-500'
+                        }`}
+                      >
+                        {isSelected ? (
+                          <Check className="w-4 h-4 text-neutral-950 stroke-[3]" />
+                        ) : (
+                          <span className="w-2 h-2 rounded-full bg-neutral-600" />
+                        )}
+                        <span>{tag}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* 1. Language Tabs */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
-                  <span className="flex items-center gap-1.5">
-                    <Languages className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Review Language</span>
-                  </span>
-                  <span className="text-amber-400 text-[10px] lowercase">English, हिन्दी, ਪੰਜਾਬੀ</span>
-                </div>
-                <div className="grid grid-cols-4 gap-1 p-1 bg-neutral-950 rounded-xl border border-neutral-800 text-xs">
+              {/* SECTION 2: LANGUAGE SELECTOR & RE-ROLL */}
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <div className="inline-flex items-center p-1 bg-neutral-950 rounded-xl border border-neutral-800 text-xs font-bold">
+                  <Languages className="w-3.5 h-3.5 text-neutral-500 ml-1.5 mr-1" />
                   {[
-                    { id: 'all', label: '🌐 All' },
+                    { id: 'all', label: 'All' },
                     { id: 'en', label: 'English' },
                     { id: 'hi', label: 'हिन्दी' },
                     { id: 'pa', label: 'ਪੰਜਾਬੀ' },
@@ -305,10 +309,10 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
                     <button
                       key={l.id}
                       type="button"
-                      onClick={() => setSelectedLanguage(l.id as any)}
-                      className={`py-1.5 px-2 rounded-lg font-bold text-xs transition-all text-center truncate ${
+                      onClick={() => handleLanguageChange(l.id as any)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
                         selectedLanguage === l.id
-                          ? 'bg-amber-500 text-neutral-950 shadow-xs'
+                          ? 'bg-amber-500 text-neutral-950'
                           : 'text-neutral-400 hover:text-white'
                       }`}
                     >
@@ -316,223 +320,92 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
                     </button>
                   ))}
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleReroll}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white text-xs font-bold transition-all border border-neutral-700"
+                  title="Generate alternative phrasing"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Shuffle</span>
+                </button>
               </div>
 
-              {/* 2. Review Length Filter */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
-                  <span className="flex items-center gap-1.5">
-                    <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Review Length</span>
+              {/* SECTION 3: 1 OR 2 INSTANT AUTHENTIC REVIEWS */}
+              <div className="space-y-3.5 pt-1">
+                <div className="flex items-center justify-between text-xs text-neutral-400 font-medium">
+                  <span className="font-bold text-neutral-200">
+                    Pick a review & post on Google in 1 tap:
+                  </span>
+                  <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Ready</span>
                   </span>
                 </div>
-                <div className="grid grid-cols-4 gap-1 p-1 bg-neutral-950 rounded-xl border border-neutral-800 text-xs">
-                  {[
-                    { id: 'all', label: 'All Lengths' },
-                    { id: 'short', label: '⚡ Short' },
-                    { id: 'mid', label: '📝 Medium' },
-                    { id: 'long', label: '📖 Story' },
-                  ].map((len) => (
-                    <button
-                      key={len.id}
-                      type="button"
-                      onClick={() => setSelectedLength(len.id as any)}
-                      className={`py-1.5 px-1.5 rounded-lg font-bold text-[11px] transition-all text-center truncate ${
-                        selectedLength === len.id
-                          ? 'bg-indigo-600 text-white shadow-xs'
-                          : 'text-neutral-400 hover:text-white'
-                      }`}
+
+                {reviewDrafts.map((draft, idx) => {
+                  const isCopied = copiedDraftId === draft.id;
+
+                  return (
+                    <div
+                      key={draft.id || idx}
+                      className="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 sm:p-5 space-y-3 shadow-lg relative group hover:border-amber-500/50 transition-all"
                     >
-                      {len.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 3. Praise Highlights (Tags) */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
-                  What did you like most?
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {availableTags.map((tag) => {
-                    const isSelected = selectedTags.includes(tag);
-                    return (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => toggleTag(tag)}
-                        className={`text-xs px-2.5 py-1 rounded-full transition-all font-medium border ${
-                          isSelected
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-xs'
-                            : 'bg-neutral-800/60 text-neutral-400 border-neutral-700/60 hover:border-neutral-500 hover:text-neutral-200'
-                        }`}
-                      >
-                        {tag}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 4. Keywords / Context Input + Auto-Inferred Suggestions */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 flex justify-between">
-                  <span>Keywords or Specific Dishes / Services</span>
-                  <span className="text-neutral-500 lowercase">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={customKeywords}
-                  onChange={(e) => setCustomKeywords(e.target.value)}
-                  placeholder="e.g. paneer tikka, fast billing, painless haircut..."
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-amber-500"
-                />
-
-                {/* Auto inferred suggestions */}
-                <div className="flex flex-wrap items-center gap-1 pt-1">
-                  <span className="text-[10px] text-neutral-500">Suggested:</span>
-                  {suggestedKeywords.map((skw) => (
-                    <button
-                      key={skw}
-                      type="button"
-                      onClick={() => handleAddKeyword(skw)}
-                      className="text-[10px] px-2 py-0.5 rounded-md bg-neutral-800/60 hover:bg-neutral-700 text-neutral-400 hover:text-neutral-200 border border-neutral-700/60 transition-colors"
-                    >
-                      + {skw}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 5. Personal Note (optional) */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 flex justify-between">
-                  <span>Special Note or Staff Name</span>
-                  <span className="text-neutral-500 lowercase">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={customNote}
-                  onChange={(e) => setCustomNote(e.target.value)}
-                  placeholder="e.g. Rahul was very polite and helpful..."
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              {/* Generate Button */}
-              <button
-                type="button"
-                onClick={handleGenerateReviews}
-                disabled={isGenerating}
-                className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-neutral-950 font-bold text-xs sm:text-sm shadow-lg shadow-amber-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:pointer-events-none"
-              >
-                {isGenerating ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-neutral-950" />
-                    <span>AI is drafting genuine reviews...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 text-neutral-950" />
-                    <span>Generate Organic 5-Star Reviews</span>
-                  </>
-                )}
-              </button>
-
-              {/* Generated Drafts */}
-              {reviewDrafts.length > 0 && (
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-center justify-between text-xs text-neutral-400">
-                    <span className="font-semibold text-neutral-300">Pick your favorite review:</span>
-                    <button
-                      type="button"
-                      onClick={handleGenerateReviews}
-                      className="text-amber-400 hover:text-amber-300 text-[11px] flex items-center gap-1 font-semibold"
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      Regenerate Fresh
-                    </button>
-                  </div>
-
-                  {reviewDrafts.map((draft) => {
-                    const isCopied = copiedDraftId === draft.id;
-                    const langBadge = draft.language === 'hi'
-                      ? '🇮🇳 हिन्दी'
-                      : draft.language === 'pa'
-                      ? '🇮🇳 ਪੰਜਾਬੀ'
-                      : '🇬🇧 English';
-                    const lengthBadge = draft.length === 'short'
-                      ? '⚡ Short'
-                      : draft.length === 'long'
-                      ? '📖 Story'
-                      : '📝 Mid';
-
-                    return (
-                      <div
-                        key={draft.id}
-                        className={`p-3.5 rounded-2xl border transition-all ${
-                          isCopied
-                            ? 'bg-amber-500/10 border-amber-500/60 shadow-md'
-                            : 'bg-neutral-950/80 border-neutral-800 hover:border-neutral-700'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/30">
-                              {langBadge}
-                            </span>
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-neutral-800 text-neutral-300">
-                              {lengthBadge}
-                            </span>
-                            <span className="text-[11px] font-bold text-neutral-300 truncate max-w-[130px]">
-                              {draft.title}
-                            </span>
-                          </div>
-                          <span className="text-amber-400 text-xs">★★★★★</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                          {draft.badge || (idx === 0 ? '✨ Authentic Review' : '⚡ Quick Review')}
+                        </span>
+                        <div className="flex items-center gap-0.5 text-amber-400">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star key={s} className="w-3.5 h-3.5 fill-amber-400" />
+                          ))}
                         </div>
-
-                        <p className="text-xs text-neutral-200 leading-relaxed mb-3">
-                          "{draft.text}"
-                        </p>
-
-                        <button
-                          type="button"
-                          onClick={() => handleSelectAndCopyReview(draft)}
-                          className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
-                            isCopied
-                              ? 'bg-emerald-500 text-white'
-                              : 'bg-neutral-800 hover:bg-neutral-700 text-white border border-neutral-700 active:scale-98'
-                          }`}
-                        >
-                          {isCopied ? (
-                            <>
-                              <Check className="w-3.5 h-3.5 stroke-[3]" />
-                              <span>
-                                Copied! Opening Google Reviews {redirectingCountdown ? `(${redirectingCountdown}s)...` : '...'}
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3.5 h-3.5 text-neutral-400" />
-                              <span>1-Tap Copy & Open Google Reviews</span>
-                              <ExternalLink className="w-3 h-3 text-neutral-500" />
-                            </>
-                          )}
-                        </button>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
 
-              {/* Direct Bypass Link */}
-              <div className="pt-2 text-center">
+                      <p className="text-xs sm:text-sm text-neutral-200 leading-relaxed font-medium">
+                        "{draft.text}"
+                      </p>
+
+                      {/* Primary One-Tap Copy & Post Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleCopyAndOpenGoogle(draft)}
+                        className={`w-full py-3 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-md active:scale-[0.98] ${
+                          isCopied
+                            ? 'bg-emerald-500 text-neutral-950 shadow-emerald-500/30'
+                            : 'bg-gradient-to-r from-amber-500 via-amber-400 to-orange-500 text-neutral-950 hover:brightness-105 shadow-amber-500/20'
+                        }`}
+                      >
+                        {isCopied ? (
+                          <>
+                            <Check className="w-4 h-4 text-neutral-950 stroke-[3]" />
+                            <span>Copied! Opening Google Reviews...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4 text-neutral-950" />
+                            <span>Copy & Post on Google</span>
+                            <ExternalLink className="w-3.5 h-3.5 text-neutral-950 ml-0.5" />
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Direct Link to Google Reviews */}
+              <div className="text-center pt-1">
                 <a
-                  href={config.googleReviewUrl || 'https://search.google.com/local/writereview'}
+                  href={
+                    config.googleReviewUrl && config.googleReviewUrl.trim()
+                      ? config.googleReviewUrl
+                      : 'https://search.google.com/local/writereview'
+                  }
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-neutral-400 hover:text-white underline underline-offset-4 flex items-center justify-center gap-1.5"
+                  className="inline-flex items-center gap-1.5 text-xs text-neutral-400 hover:text-white underline underline-offset-4 font-semibold"
                 >
                   <span>Or write your own review directly on Google</span>
                   <ExternalLink className="w-3 h-3" />
@@ -541,82 +414,66 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
             </div>
           )}
 
-          {/* LOW RATING (1-3 STARS) -> PRIVATE FEEDBACK GATEKEEPER */}
+          {/* 1-3 STARS: PRIVATE FEEDBACK FORM */}
           {isLowRating && (
-            <div className="pt-2 border-t border-neutral-800/80 space-y-4 text-left animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="pt-2 border-t border-neutral-800 space-y-4 text-left animate-in fade-in duration-200">
               {feedbackSent ? (
                 <div className="text-center py-6 space-y-3">
-                  <div className="w-12 h-12 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto border border-emerald-500/20">
-                    <HeartHandshake className="w-6 h-6" />
+                  <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+                    <CheckCircle2 className="w-7 h-7" />
                   </div>
-                  <h3 className="text-base font-bold text-white">Thank you for your honest feedback</h3>
-                  <p className="text-xs text-neutral-400 max-w-xs mx-auto leading-relaxed">
-                    Your comments have been delivered directly to management so we can address this immediately.
+                  <h3 className="text-base font-bold text-white">Thank you for your honesty</h3>
+                  <p className="text-xs text-neutral-400 leading-relaxed max-w-xs mx-auto">
+                    Your message has been sent directly to management. We appreciate your feedback and will work to make it right.
                   </p>
                 </div>
               ) : (
-                <form onSubmit={handleSubmitLowFeedback} className="space-y-4">
+                <form onSubmit={handleSubmitLowFeedback} className="space-y-3.5">
                   <div className="space-y-1">
-                    <h3 className="text-sm font-bold text-white">We're sorry your visit wasn't perfect</h3>
-                    <p className="text-xs text-neutral-400">
-                      Please tell our management team what happened so we can make things right.
+                    <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                      <MessageSquare className="w-4 h-4 text-amber-400" />
+                      <span>We're sorry your experience wasn't perfect</span>
+                    </h3>
+                    <p className="text-xs text-neutral-400 leading-relaxed">
+                      Please let our management team know what went wrong so we can resolve this immediately:
                     </p>
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 block mb-1">
-                      Your Comments <span className="text-rose-400">*</span>
-                    </label>
                     <textarea
                       rows={3}
                       value={feedbackText}
                       onChange={(e) => setFeedbackText(e.target.value)}
+                      placeholder="Tell us what happened..."
                       required
-                      placeholder="Please share what fell short and how we can improve..."
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-amber-500"
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500 font-medium"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 block mb-1">
-                        Your Name
-                      </label>
-                      <input
-                        type="text"
-                        value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
-                        placeholder="e.g. John"
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-700"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 block mb-1">
-                        Phone or Email
-                      </label>
-                      <input
-                        type="text"
-                        value={customerContact}
-                        onChange={(e) => setCustomerContact(e.target.value)}
-                        placeholder="For personal follow-up"
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-700"
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="Your name (optional)"
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500"
+                    />
+                    <input
+                      type="text"
+                      value={customerContact}
+                      onChange={(e) => setCustomerContact(e.target.value)}
+                      placeholder="Phone or email (optional)"
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500"
+                    />
                   </div>
 
                   <button
                     type="submit"
                     disabled={isSubmittingFeedback || !feedbackText.trim()}
-                    className="w-full py-3 px-4 rounded-xl font-bold text-xs bg-neutral-800 hover:bg-neutral-700 text-white border border-neutral-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="w-full py-3 px-4 rounded-xl bg-neutral-100 hover:bg-white text-neutral-950 font-bold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                   >
-                    {isSubmittingFeedback ? (
-                      <span>Sending...</span>
-                    ) : (
-                      <>
-                        <Send className="w-3.5 h-3.5" />
-                        <span>Send Private Feedback to Owner</span>
-                      </>
-                    )}
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{isSubmittingFeedback ? 'Sending...' : 'Send Privately to Management'}</span>
                   </button>
                 </form>
               )}
@@ -625,8 +482,9 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="text-center text-[11px] text-neutral-600 font-mono">
-          /r/{slug} · TAPLOCAL.IN
+        <div className="text-center text-[11px] text-neutral-500">
+          <span>Powered by </span>
+          <span className="font-bold text-neutral-400">TapLocal</span>
         </div>
       </div>
     </div>

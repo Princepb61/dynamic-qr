@@ -4,7 +4,6 @@ import { OverviewStats } from './components/OverviewStats';
 import { LinksTable } from './components/LinksTable';
 import { CreateLinkModal } from './components/CreateLinkModal';
 import { EditDestinationModal } from './components/EditDestinationModal';
-import { QRStudioModal } from './components/QRStudioModal';
 import { QRPrintCenter } from './components/QRPrintCenter';
 import { BatchPrintPage } from './components/BatchPrintPage';
 import { AuthPage } from './components/AuthPage';
@@ -13,10 +12,9 @@ import { ProfileBackupModal } from './components/ProfileBackupModal';
 import { CameraQRScannerModal } from './components/CameraQRScannerModal';
 import { CustomerFeedbackModal } from './components/CustomerFeedbackModal';
 import { LinkAnalyticsModal } from './components/LinkAnalyticsModal';
-import { PhysicalMockupPreviewModal } from './components/PhysicalMockupPreviewModal';
-import { WebNFCWriterModal } from './components/WebNFCWriterModal';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { ToastContainer, ToastMessage } from './components/Toast';
+import { printA4QRSheet } from './utils/a4QrHelper';
 import { LinkRecord, GlobalOverview, UserRecord, BatchRecord } from './types';
 import { api } from './services/api';
 import { localDb } from './services/localDb';
@@ -94,13 +92,10 @@ export default function App() {
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [activeEditLink, setActiveEditLink] = useState<LinkRecord | null>(null);
-  const [activeQRLink, setActiveQRLink] = useState<LinkRecord | null>(null);
   const [selectedPrintLink, setSelectedPrintLink] = useState<LinkRecord | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [analyticsLink, setAnalyticsLink] = useState<LinkRecord | null>(null);
-  const [activeMockupLink, setActiveMockupLink] = useState<LinkRecord | null>(null);
-  const [activeNFCLink, setActiveNFCLink] = useState<LinkRecord | null>(null);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   const [feedbackBadgeCount, setFeedbackBadgeCount] = useState(0);
 
@@ -235,7 +230,6 @@ export default function App() {
         addToast('success', `Created ${qty} dynamic QR codes successfully.`);
       } else {
         addToast('success', `Dynamic link "/r/${newLink.slug}" created successfully.`);
-        setActiveQRLink(newLink);
       }
       await loadData();
       setIsCreateOpen(false);
@@ -385,11 +379,21 @@ export default function App() {
 
                   <LinksTable
                     links={links}
-                    onOpenQR={(link) => setActiveQRLink(link)}
+                    onOpenQR={(link) =>
+                      printA4QRSheet({
+                        slug: link.slug,
+                        title: link.title,
+                        fullUrl: `${window.location.origin}/r/${link.slug}`,
+                      })
+                    }
                     onOpenEdit={(link) => setActiveEditLink(link)}
-                    onOpenPrint={(link) => setActiveQRLink(link)}
-                    onOpenMockup={(link) => setActiveMockupLink(link)}
-                    onOpenNFC={(link) => setActiveNFCLink(link)}
+                    onOpenPrint={(link) =>
+                      printA4QRSheet({
+                        slug: link.slug,
+                        title: link.title,
+                        fullUrl: `${window.location.origin}/r/${link.slug}`,
+                      })
+                    }
                     onDeleteLink={handleDeleteLink}
                     onToggleStatus={handleToggleStatus}
                     onOpenCreate={() => setIsCreateOpen(true)}
@@ -428,13 +432,6 @@ export default function App() {
         onSave={handleUpdateDestination}
       />
 
-      <QRStudioModal
-        link={activeQRLink}
-        isOpen={!!activeQRLink}
-        onClose={() => setActiveQRLink(null)}
-        onDeleteQR={handleDeleteLink}
-      />
-
       {/* In-App Mobile Camera Scanner Modal */}
       <CameraQRScannerModal
         isOpen={isScannerOpen}
@@ -457,21 +454,6 @@ export default function App() {
         link={analyticsLink}
         isOpen={!!analyticsLink}
         onClose={() => setAnalyticsLink(null)}
-      />
-
-      {/* Live Physical Standee & Decal Mockup Studio Modal */}
-      <PhysicalMockupPreviewModal
-        isOpen={!!activeMockupLink}
-        link={activeMockupLink}
-        onClose={() => setActiveMockupLink(null)}
-        onOpenNFCWriter={(link) => setActiveNFCLink(link)}
-      />
-
-      {/* WebNFC Direct Chip Writer Modal */}
-      <WebNFCWriterModal
-        isOpen={!!activeNFCLink}
-        link={activeNFCLink}
-        onClose={() => setActiveNFCLink(null)}
       />
 
       {/* Admin Profile & Data Backup Modal */}
