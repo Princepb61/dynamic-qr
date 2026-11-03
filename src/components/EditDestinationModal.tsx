@@ -225,6 +225,24 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
   const [newTagInput, setNewTagInput] = useState('');
   const [showWifiPass, setShowWifiPass] = useState(false);
 
+  // Single Destination AI Reviews configuration (ON/OFF toggle & customizable praise tags)
+  const [singleAiReviewsEnabled, setSingleAiReviewsEnabled] = useState(false);
+  const [singleBusinessName, setSingleBusinessName] = useState('');
+  const [singleBusinessCategory, setSingleBusinessCategory] = useState('Restaurant & Cafe');
+  const [singlePraiseTags, setSinglePraiseTags] = useState<string[]>([]);
+  const [newSingleTagInput, setNewSingleTagInput] = useState('');
+
+  const handleAddSinglePraiseTag = () => {
+    const trimmed = newSingleTagInput.trim();
+    if (trimmed && !singlePraiseTags.includes(trimmed)) {
+      setSinglePraiseTags((prev) => [...prev, trimmed]);
+      setNewSingleTagInput('');
+    }
+  };
+
+  const handleRemoveSinglePraiseTag = (tagToRemove: string) => {
+    setSinglePraiseTags((prev) => prev.filter((t) => t !== tagToRemove));
+  };
 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -252,11 +270,25 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
       setTitle(link.title || '');
       setDescription(link.description || '');
       setBatchPassword(link.batchPassword || '');
+
+      const isReviewMode =
+        link.presentationMode === 'review_gate' ||
+        (link.reviewGate?.enabled === true && link.presentationMode !== 'multi_action_hub');
+      setSingleAiReviewsEnabled(isReviewMode);
+      setSingleBusinessName(link.reviewGate?.businessName || link.title || '');
+      const initCat = link.reviewGate?.businessCategory || 'Restaurant & Cafe';
+      setSingleBusinessCategory(initCat);
+      setSinglePraiseTags(
+        link.reviewGate?.praiseTags && link.reviewGate.praiseTags.length > 0
+          ? link.reviewGate.praiseTags
+          : getPraiseTagsForCategory(initCat)
+      );
+
       setPresentationMode(
         link.presentationMode ||
           (link.hubConfig?.enabled
             ? 'multi_action_hub'
-            : link.reviewGate?.enabled
+            : isReviewMode
             ? 'review_gate'
             : 'instant_redirect')
       );
@@ -435,14 +467,14 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
     }
 
     const isHubActive = presentationMode === 'multi_action_hub';
-    const isSingleReviewGate = presentationMode === 'review_gate';
+    const isSingleReviewGate = !isHubActive && singleAiReviewsEnabled;
 
     if (isHubActive && !target) {
       target = `/r/${link.slug}`;
     }
 
-    if (!target && presentationMode === 'instant_redirect') {
-      setError('Please provide a destination URL for instant redirect mode, or select Multi-Action Smart Hub.');
+    if (!target && !isHubActive && !isSingleReviewGate) {
+      setError('Please provide a destination URL for instant redirect mode, or enable AI Reviews.');
       return;
     }
 
@@ -450,7 +482,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
     const reviewAct = hubActions.find((a) => a.type === 'google_review');
     const wifiAct = hubActions.find((a) => a.type === 'wifi');
 
-    let normalizedReviewUrl = (reviewAct?.destinationUrl || target || '').trim();
+    let normalizedReviewUrl = (isSingleReviewGate ? target : (reviewAct?.destinationUrl || target || '')).trim();
     if (normalizedReviewUrl && (normalizedReviewUrl.includes('google') || normalizedReviewUrl.startsWith('ChIJ') || normalizedReviewUrl.includes('goo.gl'))) {
       try {
         const norm = await normalizeToGoogleReviewUrl(normalizedReviewUrl);
@@ -490,11 +522,23 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
 
     const reviewGateConfig: ReviewGateConfig = {
       enabled: isReviewGateEnabled,
-      businessName: (reviewAct?.businessName || title || link.title || '').trim(),
-      businessCategory: (reviewAct?.businessCategory || 'Local Business').trim(),
-      googleReviewUrl: normalizedReviewUrl,
+      businessName: (
+        isSingleReviewGate
+          ? singleBusinessName || title || link.title || ''
+          : reviewAct?.businessName || title || link.title || ''
+      ).trim(),
+      businessCategory: (
+        isSingleReviewGate
+          ? singleBusinessCategory || 'Local Business'
+          : reviewAct?.businessCategory || 'Local Business'
+      ).trim(),
+      googleReviewUrl: normalizedReviewUrl || target,
       minRatingForGoogle: 4,
-      praiseTags: reviewAct?.praiseTags && reviewAct.praiseTags.length > 0
+      praiseTags: isSingleReviewGate
+        ? singlePraiseTags.length > 0
+          ? singlePraiseTags
+          : getPraiseTagsForCategory(singleBusinessCategory || 'Local Business')
+        : reviewAct?.praiseTags && reviewAct.praiseTags.length > 0
         ? reviewAct.praiseTags
         : getPraiseTagsForCategory(reviewAct?.businessCategory || 'Local Business'),
       customTone: (reviewAct?.customTone as any) || 'friendly',
@@ -759,6 +803,205 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                     </div>
                   );
                 })()}
+
+                {/* AI Reviews for Single Destination Mode: ON / OFF Option */}
+                {presentationMode !== 'multi_action_hub' && (
+                  <div className="p-4 bg-neutral-950/90 border border-neutral-800 rounded-2xl space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border transition-colors ${
+                            singleAiReviewsEnabled
+                              ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                              : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                          }`}
+                        >
+                          <Sparkles className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-white">Google AI Review Assistant</span>
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                singleAiReviewsEnabled
+                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                  : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                              }`}
+                            >
+                              {singleAiReviewsEnabled ? 'AI Reviews Active' : 'Simple Redirect'}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-neutral-400 block mt-0.5">
+                            {singleAiReviewsEnabled
+                              ? 'Shows interactive praise tags, 1-tap review generator & private feedback before Google Reviews.'
+                              : 'Bypasses AI review screen and redirects immediately to the primary destination URL.'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                        <SwitchButton
+                          checked={singleAiReviewsEnabled}
+                          onChange={(checked) => {
+                            setSingleAiReviewsEnabled(checked);
+                            setPresentationMode(checked ? 'review_gate' : 'instant_redirect');
+                          }}
+                          activeColor="amber"
+                          onText="AI REVIEWS ON"
+                          offText="SIMPLE REDIRECT"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Expandable Configuration when AI Reviews is ON */}
+                    {singleAiReviewsEnabled && (
+                      <div className="pt-3 border-t border-neutral-800 space-y-3.5 animate-in fade-in">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-neutral-300 font-semibold block">
+                              Business Name
+                            </label>
+                            <input
+                              type="text"
+                              value={singleBusinessName}
+                              onChange={(e) => setSingleBusinessName(e.target.value)}
+                              placeholder="e.g. Copper Kettle Cafe"
+                              className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-neutral-300 font-semibold block">
+                              Business Category <span className="text-amber-400">*</span>
+                            </label>
+                            {(() => {
+                              const isPredefined = BUSINESS_CATEGORIES.some(
+                                (c) => c.name === singleBusinessCategory && c.id !== 'custom'
+                              );
+                              return (
+                                <>
+                                  <select
+                                    value={isPredefined ? singleBusinessCategory : 'Other / Custom Business'}
+                                    onChange={(e) => {
+                                      const newCat = e.target.value;
+                                      if (newCat === 'Other / Custom Business') {
+                                        setSingleBusinessCategory('Other / Custom Business');
+                                        setSinglePraiseTags(getPraiseTagsForCategory('Other / Custom Business'));
+                                      } else {
+                                        setSingleBusinessCategory(newCat);
+                                        setSinglePraiseTags(getPraiseTagsForCategory(newCat));
+                                      }
+                                    }}
+                                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-medium"
+                                  >
+                                    {BUSINESS_CATEGORIES.map((cat) => (
+                                      <option key={cat.id} value={cat.name}>
+                                        {cat.icon} {cat.name}
+                                      </option>
+                                    ))}
+                                  </select>
+
+                                  {(!isPredefined || singleBusinessCategory === 'Other / Custom Business') && (
+                                    <div className="mt-2 p-2 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1 animate-in fade-in">
+                                      <label className="text-[10px] font-bold text-amber-300 block">
+                                        Type Custom Business Category
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={singleBusinessCategory === 'Other / Custom Business' ? '' : singleBusinessCategory}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setSingleBusinessCategory(val || 'Other / Custom Business');
+                                          setSinglePraiseTags(
+                                            val.trim()
+                                              ? getPraiseTagsForCategory(val)
+                                              : getPraiseTagsForCategory('Local Business')
+                                          );
+                                        }}
+                                        placeholder="e.g. Pet Grooming, Tattoo Studio, Yoga..."
+                                        className="w-full bg-neutral-900 border border-amber-500/40 rounded-lg px-2.5 py-1 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400"
+                                      />
+                                      <span className="text-[9px] text-neutral-400 block">
+                                        Praise tags &amp; AI review phrasing will dynamically adapt to this category.
+                                      </span>
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+
+                        {/* Praise Tags Management */}
+                        <div className="space-y-1.5 pt-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10px] text-neutral-300 font-semibold block">
+                              Active Praise Tags ({singlePraiseTags.length} tags)
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSinglePraiseTags(
+                                  getPraiseTagsForCategory(singleBusinessCategory || 'Local Business')
+                                );
+                              }}
+                              className="text-[10px] text-amber-400 hover:underline"
+                            >
+                              Reset to Category Defaults
+                            </button>
+                          </div>
+
+                          <div className="flex flex-wrap gap-1.5">
+                            {singlePraiseTags.map((tag) => (
+                              <span
+                                key={tag}
+                                className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg bg-neutral-900 text-neutral-200 border border-neutral-700"
+                              >
+                                <span>{tag}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveSinglePraiseTag(tag)}
+                                  className="text-neutral-400 hover:text-rose-400 font-bold ml-0.5"
+                                  title="Remove tag"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+
+                          <div className="flex gap-2 pt-1">
+                            <input
+                              type="text"
+                              value={newSingleTagInput}
+                              onChange={(e) => setNewSingleTagInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddSinglePraiseTag();
+                                }
+                              }}
+                              placeholder="Add custom praise tag (e.g. Artisanal Breads)..."
+                              className="flex-1 bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-amber-400"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddSinglePraiseTag}
+                              disabled={!newSingleTagInput.trim()}
+                              className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 text-neutral-200 text-xs font-bold rounded-lg border border-neutral-700 transition-colors"
+                            >
+                              Add Tag
+                            </button>
+                          </div>
+
+                          <span className="text-[10px] text-neutral-500 block pt-0.5">
+                            Customers can also add their own personal tags on the scan page for customized reviews.
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Direct Download Clean QR Option under Destination Setting */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-neutral-950/90 border border-neutral-800 rounded-2xl shadow-xs">

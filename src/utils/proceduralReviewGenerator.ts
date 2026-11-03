@@ -360,66 +360,159 @@ export function generateProceduralReviews(params: ProceduralReviewParams): Gener
     }
   }
 
+  // Helper to format tags into natural lowercase sentence clauses
+  const formatTag = (tag: string) => {
+    let t = tag.replace(/^[^\w\s]+/, '').trim();
+    if (t.length > 0) {
+      t = t.charAt(0).toLowerCase() + t.slice(1);
+    }
+    return t;
+  };
+
+  const activeTags = cleanTags.length > 0 ? cleanTags : allKeywords.slice(0, 3);
+
   // Build each review
   for (let i = 0; i < count; i++) {
     const currentLang = languagesToUse[i % languagesToUse.length];
     const currentLen = lengthsToUse[i % lengthsToUse.length];
-    const itemSeed = (seed + i * 7) % 500;
+    const itemSeed = (seed + i * 11) % 500;
 
     let reviewText = '';
     let reviewTitle = '';
 
-    const kw = allKeywords[itemSeed % allKeywords.length] || 'great service';
-    const kw2 = allKeywords[(itemSeed + 1) % allKeywords.length] || 'friendly staff';
     const noteSnippet = customNotes.trim() ? ` ${customNotes.trim()}` : '';
 
-    if (currentLang === 'hi') {
-      const bank = HINDI_BANK[currentLen];
-      const raw = bank[itemSeed % bank.length];
-      const extra = `${kw} और ${kw2} विशेष रूप से बहुत पसंद आया।${noteSnippet}`;
-      reviewText = raw.replace(/\$\{businessName\}/g, businessName).replace(/\$\{extra\}/g, extra);
+    // English Tag Integration
+    const t1 = formatTag(activeTags[itemSeed % activeTags.length] || 'great service');
+    const t2 = formatTag(activeTags[(itemSeed + 1) % activeTags.length] || 'friendly staff');
+    const t3 = formatTag(activeTags[(itemSeed + 2) % activeTags.length] || 'welcoming ambience');
 
-      reviewTitle = currentLen === 'short'
-        ? '⚡ संक्षिप्त हिन्दी (Short)'
-        : currentLen === 'mid'
-        ? '📝 मध्यम हिन्दी (Mid)'
-        : '📖 विस्तृत हिन्दी (Detailed)';
-    } else if (currentLang === 'pa') {
-      const bank = PUNJABI_BANK[currentLen];
-      const raw = bank[itemSeed % bank.length];
-      const extra = `${kw} ਅਤੇ ${kw2} ਖਾਸ ਤੌਰ 'ਤੇ ਬਹੁਤ ਪਸੰਦ ਆਇਆ।${noteSnippet}`;
-      reviewText = raw.replace(/\$\{businessName\}/g, businessName).replace(/\$\{extra\}/g, extra);
-
-      reviewTitle = currentLen === 'short'
-        ? '⚡ ਸੰਖੇਪ ਪੰਜਾਬੀ (Short)'
-        : currentLen === 'mid'
-        ? '📝 ਦਰਮਿਆਨੀ ਪੰਜਾਬੀ (Mid)'
-        : '📖 ਵਿਸਤ੍ਰਿਤ ਪੰਜਾਬੀ (Detailed)';
+    let enTagClause = '';
+    if (activeTags.length === 1) {
+      const singleClauses = [
+        `what really stood out was the ${t1}`,
+        `the ${t1} was absolutely top-notch`,
+        `special mention for the ${t1}—truly impressed`,
+        `you can immediately tell they take pride in their ${t1}`,
+        `the ${t1} exceeded all expectations`,
+      ];
+      enTagClause = singleClauses[itemSeed % singleClauses.length];
+    } else if (activeTags.length === 2) {
+      const doubleClauses = [
+        `what really made the visit special was the ${t1} along with their ${t2}`,
+        `both the ${t1} and ${t2} were phenomenal`,
+        `not only was the ${t1} great, but their ${t2} was equally impressive`,
+        `the combination of ${t1} and ${t2} made for a seamless experience`,
+        `loved the ${t1} and the ${t2}—everything was handled with genuine care`,
+      ];
+      enTagClause = doubleClauses[itemSeed % doubleClauses.length];
     } else {
-      // English
-      if (currentLen === 'short') {
-        const shortOpeners = [
-          `Quick shoutout to ${businessName}—absolutely top-notch!`,
-          `Five stars for ${businessName}! The ${templates.nouns[itemSeed % templates.nouns.length]} was ${templates.actions[itemSeed % templates.actions.length]}.`,
-          `Awesome experience at ${businessName} today. Fast, clean, and seamless.`,
-          `Hands down a 10/10 experience at ${businessName}.`,
-          `Great ${kw} and super friendly people at ${businessName}.`,
-        ];
-        reviewText = `${shortOpeners[itemSeed % shortOpeners.length]} ${templates.closers[(itemSeed + 1) % templates.closers.length]}`;
-        reviewTitle = '⚡ Short & Punchy';
-      } else if (currentLen === 'mid') {
-        const opener = templates.openers[itemSeed % templates.openers.length];
-        const highlight = templates.highlights[itemSeed % templates.highlights.length];
-        const closer = templates.closers[(itemSeed + 2) % templates.closers.length];
-        reviewText = `${opener} ${businessName}. The ${kw} and ${kw2} were outstanding.${noteSnippet} ${highlight} ${closer}`;
-        reviewTitle = '📝 Balanced Experience';
+      const multiClauses = [
+        `between the ${t1}, ${t2}, and ${t3}, they truly checked every box`,
+        `the ${t1}, ${t2}, and ${t3} were all 10/10`,
+        `what stood out most was the ${t1}, coupled with their ${t2} and ${t3}`,
+        `everything from the ${t1} to the ${t2} and ${t3} was executed flawlessly`,
+        `loved everything about the visit—particularly the ${t1}, ${t2}, and ${t3}`,
+      ];
+      enTagClause = multiClauses[itemSeed % multiClauses.length];
+    }
+
+    // Capitalize first letter of clause helper
+    const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+    if (currentLang === 'hi') {
+      const h1 = activeTags[itemSeed % activeTags.length] || 'बढ़िया सर्विस';
+      const h2 = activeTags[(itemSeed + 1) % activeTags.length] || 'विनम्र स्टाफ';
+      const h3 = activeTags[(itemSeed + 2) % activeTags.length] || 'साफ-सुथरा माहौल';
+
+      let hiClause = '';
+      if (activeTags.length === 1) {
+        hiClause = `यहाँ का ${h1} वाकई बहुत ही कमाल का था`;
+      } else if (activeTags.length === 2) {
+        hiClause = `खासतौर पर ${h1} और ${h2} ने दिल जीत लिया`;
       } else {
-        // Long / Narrative
-        const longIntro = `Visited ${businessName} recently and it completely exceeded our expectations from start to finish.`;
-        const longDetail = `The attention to detail regarding ${kw} and ${kw2} was noticeable right away.${noteSnippet} Everything was handled with genuine care and true professionalism.`;
-        const highlight = templates.highlights[itemSeed % templates.highlights.length];
-        const closer = `Such high standards are hard to come by these days. We will definitely be regular customers and strongly recommend them to anyone in the area!`;
-        reviewText = `${longIntro} ${longDetail} ${highlight} ${closer}`;
+        hiClause = `यहाँ की ${h1}, ${h2} और ${h3} तीनों ही बहुत बेहतरीन रहीं`;
+      }
+
+      if (currentLen === 'short') {
+        const shortHi = [
+          `${businessName} में बहुत ही बढ़िया अनुभव रहा! ${hiClause}। पूरे 5 स्टार!`,
+          `शानदार काम और बेहतरीन क्वालिटी! ${businessName} में ${hiClause}। 10/10 रेटिंग!`,
+          `पैसा वसूल अनुभव! ${businessName} में ${hiClause}। बहुत-बहुत धन्यवाद!`,
+        ];
+        reviewText = shortHi[itemSeed % shortHi.length];
+        reviewTitle = '⚡ संक्षिप्त हिन्दी (Short)';
+      } else if (currentLen === 'mid') {
+        const midHi = [
+          `${businessName} में हमारा अनुभव बहुत ही सुखद और यादगार रहा। ${hiClause}। स्टाफ का स्वभाव बहुत ही विनम्र है और काम एकदम समय पर हुआ।${noteSnippet} हम दोबारा जरूर आएंगे!`,
+          `अगर आप बढ़िया क्वालिटी और बिना किसी झंझट के बेहतरीन सर्विस ढूंढ रहे हैं, तो ${businessName} सबसे सही जगह है। ${hiClause}। साफ-सफाई और टाइमिंग एकदम परफेक्ट थी। 5 स्टार सर्विस!`,
+          `आज ${businessName} जाने का मौका मिला और सचमुच उम्मीद से कई गुना बेहतर अनुभव मिला। ${hiClause}। रेट्स भी बिल्कुल वाजिब हैं। 10/10 रेटिंग!`,
+        ];
+        reviewText = midHi[itemSeed % midHi.length];
+        reviewTitle = '📝 मध्यम हिन्दी (Mid)';
+      } else {
+        reviewText = `आज मैं अपने परिवार के साथ ${businessName} गया था और हम सब यहाँ की सर्विस से बेहद प्रभावित हुए। ${hiClause}। रिसेप्शन से लेकर आखिरी तक हर किसी का व्यवहार बहुत ही आदरपूर्ण था। यहाँ की व्यवस्था देखकर बहुत अच्छा लगा।${noteSnippet} काम की क्वालिटी में कोई समझौता नहीं है और रेट्स भी बेहद वाजिब हैं। हम अपने सभी दोस्तों और रिश्तेदारों को यहाँ आने की सलाह देंगे!`;
+        reviewTitle = '📖 विस्तृत हिन्दी (Detailed)';
+      }
+    } else if (currentLang === 'pa') {
+      const p1 = activeTags[itemSeed % activeTags.length] || 'ਵਧੀਆ ਸਰਵਿਸ';
+      const p2 = activeTags[(itemSeed + 1) % activeTags.length] || 'ਮਿਲਣਸਾਰ ਸਟਾਫ';
+      const p3 = activeTags[(itemSeed + 2) % activeTags.length] || 'ਸਾਫ਼-ਸੁਥਰਾ ਮਾਹੌਲ';
+
+      let paClause = '';
+      if (activeTags.length === 1) {
+        paClause = `ਇੱਥੋਂ ਦਾ ${p1} ਸੱਚਮੁੱਚ ਬਹੁਤ ਹੀ ਵਧੀਆ ਸੀ`;
+      } else if (activeTags.length === 2) {
+        paClause = `ਖਾਸ ਤੌਰ 'ਤੇ ${p1} ਅਤੇ ${p2} ਨੇ ਮਨ ਖੁਸ਼ ਕਰ ਦਿੱਤਾ`;
+      } else {
+        paClause = `ਇੱਥੇ ${p1}, ${p2} ਅਤੇ ${p3} ਬਿਲਕੁਲ ਟਾਪ ਕਲਾਸ ਸੀ`;
+      }
+
+      if (currentLen === 'short') {
+        const shortPa = [
+          `${businessName} ਵਿਖੇ ਬਹੁਤ ਹੀ ਵਧੀਆ ਤਜ਼ਰਬਾ ਰਿਹਾ! ${paClause}। ਪੂਰੇ 5 ਸਟਾਰ!`,
+          `ਸ਼ਾਨਦਾਰ ਸਰਵਿਸ ਤੇ ਟਾਪ ਕਲਾਸ ਕੁਆਲਿਟੀ! ${businessName} ਵਿਖੇ ${paClause}। 10/10 ਰੇਟਿੰਗ!`,
+          `ਪੈਸਾ ਵਸੂਲ ਕੁਆਲਿਟੀ! ${businessName} ਵਿਖੇ ${paClause}। ਧੰਨਵਾਦ!`,
+        ];
+        reviewText = shortPa[itemSeed % shortPa.length];
+        reviewTitle = '⚡ ਸੰਖੇਪ ਪੰਜਾਬੀ (Short)';
+      } else if (currentLen === 'mid') {
+        const midPa = [
+          `${businessName} ਵਿਖੇ ਸਾਡਾ ਤਜ਼ਰਬਾ ਬਹੁਤ ਹੀ ਵਧੀਆ ਤੇ ਯਾਦਗਾਰ ਰਿਹਾ। ${paClause}। ਸਟਾਫ ਬਹੁਤ ਮਿਲਣਸਾਰ ਹੈ ਤੇ ਕੰਮ ਵਿੱਚ ਪੂਰੀ ਸਫ਼ਾਈ ਤੇ ਮਿਹਨਤ ਦਿਖੀ।${noteSnippet} ਅਸੀਂ ਜ਼ਰੂਰ ਦੁਬਾਰਾ ਆਵਾਂਗੇ!`,
+          `ਜੇਕਰ ਤੁਸੀਂ ਵਧੀਆ ਕੁਆਲਿਟੀ ਅਤੇ ਇਮਾਨਦਾਰੀ ਵਾਲੀ ਸਰਵਿਸ ਭਾਲ ਰਹੇ ਹੋ ਤਾਂ ${businessName} ਬਿਲਕੁਲ ਸਹੀ ਥਾਂ ਹੈ। ${paClause}। ਰੇਟ ਵੀ ਜਾਇਜ਼ ਹਨ ਤੇ ਕੁਆਲਿਟੀ ਇੱਕ ਨੰਬਰ। ਸਾਡੇ ਵੱਲੋਂ ਪੂਰੇ 5 ਸਟਾਰ!`,
+        ];
+        reviewText = midPa[itemSeed % midPa.length];
+        reviewTitle = '📝 ਦਰਮਿਆਨੀ ਪੰਜਾਬੀ (Mid)';
+      } else {
+        reviewText = `ਅੱਜ ਮੈਂ ਆਪਣੇ ਪਰਿਵਾਰ ਨਾਲ ${businessName} ਆਇਆ ਸੀ ਅਤੇ ਸੱਚਮੁੱਚ ਸਾਡਾ ਤਜ਼ਰਬਾ ਉਮੀਦ ਤੋਂ ਕਿਤੇ ਜ਼ਿਆਦਾ ਸ਼ਾਨਦਾਰ ਰਿਹਾ। ${paClause}। ਅੰਦਰ ਵੜਦਿਆਂ ਹੀ ਬਹੁਤ ਹੀ ਸਤਿਕਾਰ ਨਾਲ ਗੱਲਬਾਤ ਕੀਤੀ ਗਈ। ਮਾਹੌਲ ਬਹੁਤ ਹੀ ਸਾਫ਼-ਸੁਥਰਾ ਤੇ ਸਕੂਨ ਵਾਲਾ ਸੀ।${noteSnippet} ਅਸੀਂ ਆਪਣੇ ਸਾਰੇ ਦੋਸਤਾਂ ਤੇ ਰਿਸ਼ਤੇਦਾਰਾਂ ਨੂੰ ਇੱਥੇ ਆਉਣ ਦੀ ਪੁਰਜ਼ੋਰ ਸਿਫਾਰਸ਼ ਕਰਦੇ ਹਾਂ!`;
+        reviewTitle = '📖 ਵਿਸਤ੍ਰਿਤ ਪੰਜਾਬੀ (Detailed)';
+      }
+    } else {
+      // English: Rich, Organic, Grammatically Sound Synthesized Reviews
+      if (currentLen === 'short') {
+        const shortEn = [
+          `Had a fantastic visit at ${businessName}! ${cap(enTagClause)}. Five stars!`,
+          `Quick shoutout to ${businessName}—absolutely top-notch! ${cap(enTagClause)}. Highly recommended.`,
+          `Awesome experience at ${businessName} today. ${cap(enTagClause)}. Will definitely be returning!`,
+          `10/10 experience at ${businessName}! ${cap(enTagClause)}. Keep up the wonderful work!`,
+        ];
+        reviewText = shortEn[itemSeed % shortEn.length];
+        reviewTitle = '⚡ Short & Impactful';
+      } else if (currentLen === 'mid') {
+        const midEn = [
+          `Stopped by ${businessName} today and had such a positive experience. ${cap(enTagClause)}. The whole team was welcoming and attentive from start to finish.${noteSnippet} A well-deserved 5 stars!`,
+          `Such a wonderful experience at ${businessName}. ${cap(enTagClause)}. It’s genuinely refreshing to visit a place that takes so much pride in customer satisfaction. Already looking forward to my next visit!`,
+          `First time visiting ${businessName} and it definitely won't be my last! ${cap(enTagClause)}. Everything ran smoothly with zero hassles. Strongly recommend to anyone in the area.`,
+          `If you appreciate top-tier quality and warm hospitality, ${businessName} is the place to go. ${cap(enTagClause)}.${noteSnippet} 10/10 without hesitation!`,
+        ];
+        reviewText = midEn[itemSeed % midEn.length];
+        reviewTitle = '📝 Balanced & Authentic';
+      } else {
+        const longEn = [
+          `We visited ${businessName} recently based on great recommendations, and they truly blew us away. ${cap(enTagClause)}. From the warm greeting when we walked in to the final checkout, the attention to detail was remarkable.${noteSnippet} In a world where consistent service is rare, they truly set the gold standard. We'll certainly be regulars and recommending to all our friends!`,
+          `Cannot say enough good things about our visit to ${businessName}. ${cap(enTagClause)}. Everything was handled with genuine care, precision, and efficiency.${noteSnippet} It's clear the entire team takes immense pride in their craft. Five stars all the way!`,
+        ];
+        reviewText = longEn[itemSeed % longEn.length];
         reviewTitle = '📖 Detailed Customer Story';
       }
     }

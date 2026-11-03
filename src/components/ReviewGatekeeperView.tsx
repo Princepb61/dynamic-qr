@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Heart,
   ChevronRight,
+  Plus,
 } from 'lucide-react';
 import { ReviewGateConfig } from '../types';
 import {
@@ -67,11 +68,34 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
     return [];
   });
 
+  // Customer custom praise tags added on the fly by visitor
+  const [customerCustomTags, setCustomerCustomTags] = useState<string[]>([]);
+  const [newCustomerTagInput, setNewCustomerTagInput] = useState('');
+  const [showAddTagForm, setShowAddTagForm] = useState(false);
+
+  // Merge pre-configured tags with visitor's custom added tags
+  const allDisplayedTags = useMemo(() => {
+    return Array.from(new Set([...availableTags, ...customerCustomTags]));
+  }, [availableTags, customerCustomTags]);
+
   const [selectedLanguage, setSelectedLanguage] = useState<'all' | ReviewLanguage>('all');
   const [regenSeed, setRegenSeed] = useState(1);
   const [reviewDrafts, setReviewDrafts] = useState<ReviewDraft[]>([]);
   const [copiedDraftId, setCopiedDraftId] = useState<number | null>(null);
   const [redirectingCountdown, setRedirectingCountdown] = useState<number | null>(null);
+
+  const handleAddCustomerTag = () => {
+    const trimmed = newCustomerTagInput.trim();
+    if (!trimmed) return;
+    if (!customerCustomTags.includes(trimmed) && !availableTags.includes(trimmed)) {
+      setCustomerCustomTags((prev) => [...prev, trimmed]);
+    }
+    // Automatically select the newly added custom tag
+    setSelectedTags((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+    setNewCustomerTagInput('');
+    setShowAddTagForm(false);
+    setRegenSeed((s) => s + 1);
+  };
 
   // 1-3 Stars state (Private feedback)
   const [feedbackText, setFeedbackText] = useState('');
@@ -274,7 +298,7 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
 
                 {/* Big, bold, easily readable tags */}
                 <div className="flex flex-wrap gap-2 pt-1">
-                  {availableTags.map((tag) => {
+                  {allDisplayedTags.map((tag) => {
                     const isSelected = selectedTags.includes(tag);
                     return (
                       <button
@@ -296,7 +320,60 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
                       </button>
                     );
                   })}
+
+                  {/* Customer Custom Tag Button */}
+                  {!showAddTagForm && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddTagForm(true)}
+                      className="text-xs sm:text-sm font-bold px-3.5 sm:px-4 py-2.5 rounded-2xl border border-dashed border-amber-500/60 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 hover:text-white transition-all flex items-center gap-1.5 active:scale-95"
+                    >
+                      <Plus className="w-4 h-4 text-amber-400" />
+                      <span>+ Add Your Own Tag</span>
+                    </button>
+                  )}
                 </div>
+
+                {/* Inline custom highlight adder */}
+                {showAddTagForm && (
+                  <div className="p-3 bg-neutral-900 border border-amber-500/40 rounded-2xl space-y-2 animate-in fade-in">
+                    <div className="flex items-center justify-between text-xs text-amber-300 font-bold">
+                      <span>Type what you loved most (dish, staff, experience):</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddTagForm(false)}
+                        className="text-neutral-400 hover:text-white text-xs underline"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newCustomerTagInput}
+                        onChange={(e) => setNewCustomerTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddCustomerTag();
+                          }
+                        }}
+                        placeholder="e.g. Delicious Cold Brew, Hair Spa, Painless Treatment..."
+                        autoFocus
+                        className="flex-1 bg-neutral-950 border border-neutral-700 focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCustomerTag}
+                        disabled={!newCustomerTagInput.trim()}
+                        className="px-4 py-2 bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-neutral-950 font-bold text-xs rounded-xl transition-all active:scale-95 flex items-center gap-1 shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                        <span>Add &amp; Apply</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* SECTION 2: LANGUAGE SELECTOR & RE-ROLL */}
