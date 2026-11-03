@@ -24,6 +24,7 @@ import { VCardData, WifiData } from '../types';
 import { generateVCardString, generateWifiString } from '../utils/vcardHelper';
 import { BUSINESS_CATEGORIES, getPraiseTagsForCategory } from '../utils/categoryTags';
 import { validateSecureHttpsUrl } from '../utils/urlValidator';
+import { normalizeToGoogleReviewUrl } from '../utils/mapsUrlHelper';
 
 interface CreateLinkModalProps {
   isOpen: boolean;
@@ -80,13 +81,42 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
 
   // Preset 2: Google Review
   const [googlePlaceOrUrl, setGooglePlaceOrUrl] = useState('');
+  const [isConvertingMapsUrl, setIsConvertingMapsUrl] = useState(false);
+  const [mapsConversionStatus, setMapsConversionStatus] = useState<{ isConverted: boolean; message?: string } | null>(null);
   const [enableReviewGatekeeper, setEnableReviewGatekeeper] = useState(true);
   const [businessName, setBusinessName] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState('restaurant');
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState('');
   const [praiseTags, setPraiseTags] = useState<string[]>(() =>
     BUSINESS_CATEGORIES[0]?.defaultTags ? [...BUSINESS_CATEGORIES[0].defaultTags] : []
   );
   const [newTagInput, setNewTagInput] = useState('');
+
+  const handleGoogleUrlBlurOrPaste = async (inputVal: string) => {
+    const trimmed = inputVal.trim();
+    if (!trimmed) return;
+    setIsConvertingMapsUrl(true);
+    try {
+      const res = await normalizeToGoogleReviewUrl(trimmed);
+      if (res.isConverted && res.reviewUrl) {
+        setGooglePlaceOrUrl(res.reviewUrl);
+        setMapsConversionStatus({
+          isConverted: true,
+          message: res.message || 'Auto-converted to direct Google Rate & Review dialog',
+        });
+      } else if (res.reviewUrl.includes('search.google.com/local/writereview')) {
+        setMapsConversionStatus({
+          isConverted: true,
+          message: 'Direct 5-Star Review Dialog Ready',
+        });
+      }
+    } catch {
+      // Keep input if resolution fails
+    } finally {
+      setIsConvertingMapsUrl(false);
+    }
+  };
 
   // Preset 3: WhatsApp
   const [waCountryCode, setWaCountryCode] = useState('+91');
@@ -128,9 +158,20 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
   // Update praise tags when category changes
   const handleCategoryChange = (catId: string) => {
     setSelectedCategoryId(catId);
-    const cat = BUSINESS_CATEGORIES.find((c) => c.id === catId);
-    if (cat) {
-      setPraiseTags([...cat.defaultTags]);
+    if (catId === 'custom') {
+      setIsCustomCategory(true);
+      if (customCategoryName.trim()) {
+        setPraiseTags(getPraiseTagsForCategory(customCategoryName));
+      } else {
+        const cat = BUSINESS_CATEGORIES.find((c) => c.id === 'custom');
+        if (cat) setPraiseTags([...cat.defaultTags]);
+      }
+    } else {
+      setIsCustomCategory(false);
+      const cat = BUSINESS_CATEGORIES.find((c) => c.id === catId);
+      if (cat) {
+        setPraiseTags([...cat.defaultTags]);
+      }
     }
   };
 
@@ -197,7 +238,9 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
       let reviewGate: any = undefined;
 
       const activeCategory = BUSINESS_CATEGORIES.find((c) => c.id === selectedCategoryId);
-      const categoryName = activeCategory ? activeCategory.name : 'Local Business';
+      const categoryName = (isCustomCategory || selectedCategoryId === 'custom') && customCategoryName.trim()
+        ? customCategoryName.trim()
+        : (activeCategory ? activeCategory.name : 'Local Business');
 
       // If user chose to reserve blank stock QR code
       if (isUnassignedReservation || contentType === 'unassigned') {
@@ -224,10 +267,17 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
               setIsSubmitting(false);
               return;
             }
-            if (target.startsWith('ChIJ')) {
-              target = `https://search.google.com/local/writereview?placeid=${encodeURIComponent(target)}`;
-            } else if (!target.startsWith('http://') && !target.startsWith('https://')) {
-              target = `https://www.google.com/search?q=${encodeURIComponent(target + ' reviews')}`;
+            try {
+              const norm = await normalizeToGoogleReviewUrl(target);
+              if (norm.reviewUrl) {
+                target = norm.reviewUrl;
+              }
+            } catch {
+              if (target.startsWith('ChIJ')) {
+                target = `https://search.google.com/local/writereview?placeid=${encodeURIComponent(target)}`;
+              } else if (!target.startsWith('http://') && !target.startsWith('https://')) {
+                target = `https://www.google.com/search?q=${encodeURIComponent(target + ' reviews')}`;
+              }
             }
             destinationUrl = target;
             if (enableReviewGatekeeper) {
@@ -470,20 +520,87 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
                     <p className="text-[10px] text-neutral-500 dark:text-neutral-400 mt-1">
                       Loads industry-specific highlights (salon, clinic, auto repair, cafe, etc.) for authentic customer reviews.
                     </p>
+
+                    {(isCustomCategory || selectedCategoryId === 'custom') && (
+                      <div className="mt-2.5 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1 animate-in fade-in">
+                        <label className="block text-xs font-bold text-amber-800 dark:text-amber-300">
+                          Type Custom Business Category *
+                        </label>
+                        <input
+                          type="text"
+                          value={customCategoryName}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCustomCategoryName(val);
+                            if (val.trim()) {
+                              setPraiseTags(getPraiseTagsForCategory(val));
+                            }
+                          }}
+                          placeholder="e.g. Pet Grooming, Dance Academy, Tattoo Studio, Yoga..."
+                          required
+                          className="w-full px-3 py-1.5 text-xs bg-white dark:bg-neutral-800 border border-amber-500/40 rounded-lg text-neutral-900 dark:text-white font-medium focus:outline-none focus:border-amber-500"
+                        />
+                        <span className="text-[10px] text-neutral-500 dark:text-neutral-400 block">
+                          AI reviews will be tailored specifically around this business type.
+                        </span>
+                      </div>
+                    )}
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
-                      Google Review Link or Google Place ID *
-                    </label>
-                    <input
-                      type="text"
-                      value={googlePlaceOrUrl}
-                      onChange={(e) => setGooglePlaceOrUrl(e.target.value)}
-                      placeholder="e.g. https://g.page/r/... or ChIJN1t_tDeuEmsRUsoyG83frY4"
-                      required
-                      className="w-full px-3.5 py-2 text-xs font-mono bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:border-amber-500"
-                    />
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                        Google Maps Review Link or Place ID *
+                      </label>
+                      <span className="text-[10px] text-amber-500 font-semibold flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />
+                        <span>Auto-Converts to 5-Star Dialog</span>
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={googlePlaceOrUrl}
+                        onChange={(e) => {
+                          setGooglePlaceOrUrl(e.target.value);
+                          setMapsConversionStatus(null);
+                        }}
+                        onBlur={(e) => handleGoogleUrlBlurOrPaste(e.target.value)}
+                        onPaste={(e) => {
+                          const pasted = e.clipboardData.getData('text');
+                          if (pasted) {
+                            setTimeout(() => handleGoogleUrlBlurOrPaste(pasted), 10);
+                          }
+                        }}
+                        placeholder="Paste any link: maps.app.goo.gl/... or google.com/maps or Place ID (ChIJ...)"
+                        required
+                        className="w-full px-3.5 py-2 text-xs font-mono bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:border-amber-500"
+                      />
+                      {isConvertingMapsUrl && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <RefreshCw className="w-3.5 h-3.5 text-amber-500 animate-spin" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Live Conversion Status Banner */}
+                    {isConvertingMapsUrl && (
+                      <p className="text-[11px] text-amber-500 flex items-center gap-1 animate-pulse">
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        <span>Resolving Google Maps link and converting to direct 5-star review page...</span>
+                      </p>
+                    )}
+
+                    {mapsConversionStatus && (
+                      <div className="p-2 bg-emerald-500/10 border border-emerald-500/25 rounded-lg text-[11px] text-emerald-400 font-medium flex items-center gap-1.5 animate-in fade-in">
+                        <Check className="w-3.5 h-3.5 text-emerald-400 stroke-[3]" />
+                        <span>{mapsConversionStatus.message}</span>
+                      </div>
+                    )}
+
+                    <p className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                      Supports short links (maps.app.goo.gl), desktop place URLs, Place IDs, and CIDs. Customers will be taken directly into Google's 5-star review dialog.
+                    </p>
                   </div>
 
                   <div>

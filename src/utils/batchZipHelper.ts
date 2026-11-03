@@ -11,8 +11,8 @@ export interface BatchZipProgress {
 }
 
 /**
- * Renders a crisp 1024x1140 PNG image of the QR code with only the bold link code printed underneath.
- * NOTE: As requested by the user, NO short link or URL is printed on the canvas.
+ * Renders a crisp 1024x1140 QR code PNG image with ONLY the 4-digit code at the bottom.
+ * NOTE: As requested by the user, business name and URLs are omitted.
  */
 export async function renderQRCardBlob(link: LinkRecord, originUrl: string): Promise<Blob> {
   const code = getLast4Letters(link.slug).toUpperCase();
@@ -43,11 +43,11 @@ export async function renderQRCardBlob(link: LinkRecord, originUrl: string): Pro
           return;
         }
 
-        // 1. Crisp white background
+        // 1. Crisp pure white background
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // 2. Draw QR code centered in the upper section
+        // 2. Draw centered high-contrast QR code
         const qrSize = 880;
         const qrX = (canvas.width - qrSize) / 2;
         const qrY = 60;
@@ -61,22 +61,12 @@ export async function renderQRCardBlob(link: LinkRecord, originUrl: string): Pro
         ctx.lineTo(canvas.width - 120, qrY + qrSize + 24);
         ctx.stroke();
 
-        // 4. Print prominent Link Code only (NO URL, as requested)
+        // 4. Print prominent 4-digit link code at the bottom (NO business name, NO URLs, format: #XXXX)
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-
-        // Primary bold link code
-        ctx.font = 'bold 56px ui-monospace, "SF Mono", "JetBrains Mono", Consolas, monospace';
+        ctx.font = 'bold 72px ui-monospace, "SF Mono", "JetBrains Mono", Consolas, monospace';
         ctx.fillStyle = '#0f172a';
-        ctx.fillText(`CODE: #${code}`, canvas.width / 2, 1030);
-
-        // Optional subtle title/label if assigned
-        if (link.title && !link.title.toLowerCase().startsWith('dynamic qr') && !link.title.toLowerCase().startsWith('reserved qr')) {
-          ctx.font = '600 28px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-          ctx.fillStyle = '#64748b';
-          const truncated = link.title.length > 36 ? link.title.slice(0, 36) + '...' : link.title;
-          ctx.fillText(truncated, canvas.width / 2, 1086);
-        }
+        ctx.fillText(`#${code}`, canvas.width / 2, 1045);
 
         canvas.toBlob((blob) => {
           if (blob) {
@@ -92,6 +82,32 @@ export async function renderQRCardBlob(link: LinkRecord, originUrl: string): Pro
     img.onerror = (err) => reject(err);
     img.src = qrDataUrl;
   });
+}
+
+/**
+ * Downloads a single link's clean QR code as a 1024x1024 PNG image with NO code or business name text.
+ */
+export async function downloadSingleQR(link: LinkRecord): Promise<void> {
+  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://taplocal.in';
+  const blob = await renderQRCardBlob(link, originUrl);
+  const code = getLast4Letters(link.slug).toUpperCase();
+  const cleanTitle = (link.title || 'QR')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 30);
+
+  const downloadUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = `${code}_${cleanTitle}_QR.png`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  setTimeout(() => {
+    URL.revokeObjectURL(downloadUrl);
+  }, 10000);
 }
 
 /**

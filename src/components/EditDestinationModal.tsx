@@ -30,9 +30,13 @@ import {
   ImageIcon,
   Upload,
   ShieldAlert,
+  QrCode,
+  Download,
 } from 'lucide-react';
 import { BUSINESS_CATEGORIES, getPraiseTagsForCategory } from '../utils/categoryTags';
 import { validateSecureHttpsUrl } from '../utils/urlValidator';
+import { downloadSingleQR } from '../utils/batchZipHelper';
+import { normalizeToGoogleReviewUrl } from '../utils/mapsUrlHelper';
 
 interface EditDestinationModalProps {
   link: LinkRecord | null;
@@ -224,6 +228,23 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDownloadingQR, setIsDownloadingQR] = useState(false);
+  const [qrDownloadedToast, setQrDownloadedToast] = useState(false);
+
+  const handleDownloadQR = async () => {
+    if (!link) return;
+    try {
+      setIsDownloadingQR(true);
+      await downloadSingleQR(link);
+      setQrDownloadedToast(true);
+      setTimeout(() => setQrDownloadedToast(false), 3000);
+    } catch (err: any) {
+      console.error('Failed to download QR code:', err);
+      alert(err?.message || 'Could not download QR code.');
+    } finally {
+      setIsDownloadingQR(false);
+    }
+  };
 
   useEffect(() => {
     if (link) {
@@ -429,6 +450,38 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
     const reviewAct = hubActions.find((a) => a.type === 'google_review');
     const wifiAct = hubActions.find((a) => a.type === 'wifi');
 
+    let normalizedReviewUrl = (reviewAct?.destinationUrl || target || '').trim();
+    if (normalizedReviewUrl && (normalizedReviewUrl.includes('google') || normalizedReviewUrl.startsWith('ChIJ') || normalizedReviewUrl.includes('goo.gl'))) {
+      try {
+        const norm = await normalizeToGoogleReviewUrl(normalizedReviewUrl);
+        if (norm.reviewUrl) {
+          normalizedReviewUrl = norm.reviewUrl;
+        }
+      } catch {
+        if (normalizedReviewUrl.startsWith('ChIJ')) {
+          normalizedReviewUrl = `https://search.google.com/local/writereview?placeid=${encodeURIComponent(normalizedReviewUrl)}`;
+        }
+      }
+    }
+
+    if (target && (target.includes('maps.app.goo.gl') || target.includes('goo.gl/maps') || target.startsWith('ChIJ'))) {
+      try {
+        const normTarget = await normalizeToGoogleReviewUrl(target);
+        if (normTarget.reviewUrl) {
+          target = normTarget.reviewUrl;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const updatedActions = hubActions.map((a) => {
+      if (a.type === 'google_review' && normalizedReviewUrl) {
+        return { ...a, destinationUrl: normalizedReviewUrl };
+      }
+      return a;
+    });
+
     const isAiReviewsEnabled =
       reviewAct ? reviewAct.enabled !== false && reviewAct.enableAiReviews !== false : false;
 
@@ -439,7 +492,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
       enabled: isReviewGateEnabled,
       businessName: (reviewAct?.businessName || title || link.title || '').trim(),
       businessCategory: (reviewAct?.businessCategory || 'Local Business').trim(),
-      googleReviewUrl: (reviewAct?.destinationUrl || target || '').trim(),
+      googleReviewUrl: normalizedReviewUrl,
       minRatingForGoogle: 4,
       praiseTags: reviewAct?.praiseTags && reviewAct.praiseTags.length > 0
         ? reviewAct.praiseTags
@@ -452,7 +505,7 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
       heading: hubHeading.trim() || title || link.title,
       subheading: hubSubheading.trim() || 'Choose an option below',
       customImageUrl: hubCustomImage.trim() || undefined,
-      actions: hubActions,
+      actions: updatedActions,
     };
 
     let effectivePresentationMode: 'instant_redirect' | 'button_page' | 'review_gate' | 'multi_action_hub' | 'vcard_profile' | 'wifi_card' = 'instant_redirect';
@@ -636,7 +689,32 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                           type="text"
                           value={destinationUrl}
                           onChange={(e) => setDestinationUrl(e.target.value)}
-                          placeholder="https://example.com/menu or leave blank if using Multi-Action Hub"
+                          onBlur={async (e) => {
+                            const val = e.target.value.trim();
+                            if (!val) return;
+                            try {
+                              const res = await normalizeToGoogleReviewUrl(val);
+                              if (res.isConverted && res.reviewUrl && res.reviewUrl !== val) {
+                                setDestinationUrl(res.reviewUrl);
+                              }
+                            } catch {
+                              // ignore
+                            }
+                          }}
+                          onPaste={async (e) => {
+                            const pasted = e.clipboardData.getData('text');
+                            if (pasted && pasted.trim()) {
+                              try {
+                                const res = await normalizeToGoogleReviewUrl(pasted.trim());
+                                if (res.isConverted && res.reviewUrl) {
+                                  setTimeout(() => setDestinationUrl(res.reviewUrl), 10);
+                                }
+                              } catch {
+                                // ignore
+                              }
+                            }
+                          }}
+                          placeholder="https://example.com/menu, Google Maps link, or leave blank if using Multi-Action Hub"
                           className={`w-full bg-neutral-950 border rounded-xl pl-3.5 pr-8 py-2.5 text-xs text-white focus:outline-none transition-colors font-mono ${
                             urlValidation
                               ? urlValidation.isValid
@@ -681,6 +759,30 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                     </div>
                   );
                 })()}
+
+                {/* Direct Download Clean QR Option under Destination Setting */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-neutral-950/90 border border-neutral-800 rounded-2xl shadow-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+                      <QrCode className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-white block">Download Physical QR Asset</span>
+                      <span className="text-[11px] text-neutral-400">
+                        High-resolution 1024×1024 clean PNG (pure QR code, no text or business name overlays)
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownloadQR}
+                    disabled={isDownloadingQR}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50 shrink-0"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>{isDownloadingQR ? 'Downloading...' : qrDownloadedToast ? 'Downloaded PNG!' : 'Download QR Code'}</span>
+                  </button>
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
@@ -1045,20 +1147,52 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
 
                                   {/* Direct Google Review URL */}
                                   <div className="space-y-1">
-                                    <label className="text-[10px] text-neutral-300 font-semibold block">
-                                      Google Review Direct Link <span className="text-amber-400">*</span>
-                                    </label>
+                                    <div className="flex items-center justify-between">
+                                      <label className="text-[10px] text-neutral-300 font-semibold block">
+                                        Google Review Direct Link <span className="text-amber-400">*</span>
+                                      </label>
+                                      <span className="text-[9px] text-amber-400 font-medium">
+                                        ⚡ Auto-converts to 5-Star dialog
+                                      </span>
+                                    </div>
                                     <input
                                       type="text"
                                       value={action.destinationUrl || ''}
                                       onChange={(e) =>
                                         handleUpdateHubAction(action.id, { destinationUrl: e.target.value })
                                       }
-                                      placeholder="https://g.page/r/your-google-place-id/review"
-                                      className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                                      onBlur={async (e) => {
+                                        const val = e.target.value.trim();
+                                        if (!val) return;
+                                        try {
+                                          const res = await normalizeToGoogleReviewUrl(val);
+                                          if (res.isConverted && res.reviewUrl && res.reviewUrl !== val) {
+                                            handleUpdateHubAction(action.id, { destinationUrl: res.reviewUrl });
+                                          }
+                                        } catch {
+                                          // ignore
+                                        }
+                                      }}
+                                      onPaste={async (e) => {
+                                        const pasted = e.clipboardData.getData('text');
+                                        if (pasted && pasted.trim()) {
+                                          try {
+                                            const res = await normalizeToGoogleReviewUrl(pasted.trim());
+                                            if (res.isConverted && res.reviewUrl) {
+                                              setTimeout(() => {
+                                                handleUpdateHubAction(action.id, { destinationUrl: res.reviewUrl });
+                                              }, 10);
+                                            }
+                                          } catch {
+                                            // ignore
+                                          }
+                                        }
+                                      }}
+                                      placeholder="Paste any link: maps.app.goo.gl/..., place URL, or ChIJ..."
+                                      className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-amber-400"
                                     />
                                     <span className="text-[10px] text-neutral-500">
-                                      Where guests submit their final review on Google.
+                                      Auto-converts short links &amp; Place IDs into the direct 5-star write-review dialog.
                                     </span>
                                   </div>
 
@@ -1084,24 +1218,67 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
                                           <label className="text-[10px] text-neutral-300 font-semibold block">
                                             Business Category <span className="text-amber-400">*</span>
                                           </label>
-                                          <select
-                                            value={action.businessCategory || 'Restaurant & Cafe'}
-                                            onChange={(e) => {
-                                              const newCat = e.target.value;
-                                              const suggested = getPraiseTagsForCategory(newCat);
-                                              handleUpdateHubAction(action.id, {
-                                                businessCategory: newCat,
-                                                praiseTags: suggested,
-                                              });
-                                            }}
-                                            className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-medium"
-                                          >
-                                            {BUSINESS_CATEGORIES.map((cat) => (
-                                              <option key={cat.id} value={cat.name}>
-                                                {cat.icon} {cat.name}
-                                              </option>
-                                            ))}
-                                          </select>
+                                          {(() => {
+                                            const isPredefined = BUSINESS_CATEGORIES.some(
+                                              (c) => c.name === action.businessCategory && c.id !== 'custom'
+                                            );
+                                            return (
+                                              <>
+                                                <select
+                                                  value={isPredefined ? (action.businessCategory || 'Restaurant & Cafe') : 'Other / Custom Business'}
+                                                  onChange={(e) => {
+                                                    const newCat = e.target.value;
+                                                    if (newCat === 'Other / Custom Business') {
+                                                      handleUpdateHubAction(action.id, {
+                                                        businessCategory: 'Other / Custom Business',
+                                                        praiseTags: getPraiseTagsForCategory('Other / Custom Business'),
+                                                      });
+                                                    } else {
+                                                      const suggested = getPraiseTagsForCategory(newCat);
+                                                      handleUpdateHubAction(action.id, {
+                                                        businessCategory: newCat,
+                                                        praiseTags: suggested,
+                                                      });
+                                                    }
+                                                  }}
+                                                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-medium"
+                                                >
+                                                  {BUSINESS_CATEGORIES.map((cat) => (
+                                                    <option key={cat.id} value={cat.name}>
+                                                      {cat.icon} {cat.name}
+                                                    </option>
+                                                  ))}
+                                                </select>
+
+                                                {(!isPredefined || action.businessCategory === 'Other / Custom Business') && (
+                                                  <div className="mt-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1 animate-in fade-in">
+                                                    <label className="text-[10px] font-bold text-amber-300 block">
+                                                      Type Custom Business Category
+                                                    </label>
+                                                    <input
+                                                      type="text"
+                                                      value={action.businessCategory === 'Other / Custom Business' ? '' : action.businessCategory || ''}
+                                                      onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        const suggested = val.trim()
+                                                          ? getPraiseTagsForCategory(val)
+                                                          : getPraiseTagsForCategory('Local Business');
+                                                        handleUpdateHubAction(action.id, {
+                                                          businessCategory: val || 'Other / Custom Business',
+                                                          praiseTags: suggested,
+                                                        });
+                                                      }}
+                                                      placeholder="e.g. Pet Grooming, Dance Academy, Tattoo Studio, Yoga..."
+                                                      className="w-full bg-neutral-900 border border-amber-500/40 rounded-lg px-2.5 py-1 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400"
+                                                    />
+                                                    <span className="text-[9px] text-neutral-400 block">
+                                                      Praise tags and AI reviews will adapt to this custom category.
+                                                    </span>
+                                                  </div>
+                                                )}
+                                              </>
+                                            );
+                                          })()}
                                         </div>
                                       </div>
 
@@ -1362,11 +1539,19 @@ export const EditDestinationModal: React.FC<EditDestinationModalProps> = ({
             )}
 
             {/* Footer Buttons */}
-            <div className="pt-3 border-t border-neutral-800 flex items-center justify-between">
-              <span className="text-[11px] text-neutral-500">
-                All changes take effect immediately across all physical and digital scans.
-              </span>
-              <div className="flex gap-2">
+            <div className="pt-3 border-t border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleDownloadQR}
+                disabled={isDownloadingQR}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all active:scale-95 shrink-0 self-start sm:self-auto"
+                title="Download clean 1024x1024 QR code PNG"
+              >
+                <Download className="w-3.5 h-3.5 text-amber-400" />
+                <span>{isDownloadingQR ? 'Downloading...' : qrDownloadedToast ? 'Downloaded PNG!' : 'Download Clean QR (PNG)'}</span>
+              </button>
+
+              <div className="flex items-center gap-2 self-end sm:self-auto">
                 <button
                   type="button"
                   onClick={onClose}

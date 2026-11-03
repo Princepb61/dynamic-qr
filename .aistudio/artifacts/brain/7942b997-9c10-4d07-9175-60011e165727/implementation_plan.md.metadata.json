@@ -1,6 +1,6 @@
 {
-  "summary":  "Revised implementation plan for exporting batch QR codes as PNG images in a ZIP archive, strictly printing only the prominent link code underneath the QR code without any short link URLs.",
-  "updatedAt":  "2026-11-02T09:37:16.236053140Z",
-  "requestFeedback":  true,
-  "userFacing":  true
+  "summary": "Implementation plan for ultra-smooth instant scan-to-Google Review opening, automatic conversion of all Google Maps links into direct 5-star review dialogs, clean QR PNG cards featuring 4-digit codes at the bottom (with business names and URLs omitted), custom business category typing, and in-modal QR downloads.",
+  "updatedAt": "2026-11-03T09:29:02.446159340Z",
+  "requestFeedback": true,
+  "userFacing": true
 }

@@ -1,97 +1,109 @@
-# Batch QR Codes PNG & ZIP Export (Link Code Only, No Short Link)
+# Instant Scan-to-Review & Google Maps Auto-Redirect Architecture
 
-Export batch dynamic QR codes into a ZIP file containing high-resolution 300 DPI PNG cards. Each image renders the clean QR code with **only the batch link code** (e.g. `CODE: #A1B2`) printed underneath—**without any short link or URL printed** on the image.
+Deliver a zero-latency, friction-free customer experience from QR scan to Google 5-Star Review opening. Includes pre-resolved direct review URLs (`search.google.com/local/writereview`), auto-converting pasted Google Maps links, 4-digit code printing on the bottom of QR PNG cards (without business names or URLs), custom business category typing, and instant QR downloads within destination configuration.
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> The following user preferences are incorporated into this plan:
-> - **No Short Link Printed**: Each generated PNG image strictly contains the sharp QR code and the bold link code text (e.g., `#A1B2` or `CODE: #A1B2`). No URL or short link (`/r/...` or domain) will be printed on the card canvas.
-> - **PNG File Naming**: Files inside the ZIP archive are formatted as `[LINK-CODE]_[TITLE].png` (e.g., `A1B2_Table_01_Menu.png`), with fallback to `[LINK-CODE]_QR.png` if unassigned.
-> - **UI Action Placements**: The "Download Batch PNGs (ZIP)" action is placed directly in the **Batch Print** header/toolbar AND on every batch group card in the **Links & QR Roster** table.
+> The following user preferences are confirmed and locked:
+> 1. **Instant Tap-to-Copy & Immediate Launch**: On the customer review page, tapping "Copy & Write Review on Google" executes in 0ms: copies the review draft to the clipboard and immediately launches the Google 5-star review dialog without any intermediate lag or delay.
+> 2. **Pre-Resolved Direct Review Dialog**: The Google Review URL is pre-resolved into `https://search.google.com/local/writereview?placeid=...` (or `?cid=...`) at link save time, so when the customer taps the button, Google's 5-star rating composer opens instantly.
+> 3. **4-Digit Code at Bottom of QR PNG**: Each generated QR PNG card renders the QR code with only the bold 4-digit code (e.g., `CODE: #A1B2`) centered at the bottom. Business names and URLs are omitted.
+> 4. **Auto-Convert All Google Maps Link Formats**: Pasted `maps.app.goo.gl`, `goo.gl/maps`, desktop place URLs, Place IDs (`ChIJ...`), or CIDs are automatically converted to direct review dialog format.
+> 5. **Custom Business Category Typing**: Admins can freely type any custom business category (e.g., Pet Grooming, Tattoo Studio, Yoga) with tailored smart review tags.
+> 6. **Direct QR Download Inside Destination Modal**: Dedicated download option right under the destination URL input and in the modal footer.
 
 ---
 
 ## 1. Overview & Core Concept
 
-- **What It Does**: Allows administrators and clients to download an entire batch of dynamic QR codes in one click as a ZIP file. Each QR code is packaged as an individual high-resolution PNG image with only its unique link code printed directly below the code, suitable for acrylic standee makers, laser engravers, or print shops where URLs should not be visible.
-- **Target Audience**: Business owners, marketing teams, and print vendors who need clean QR images identified solely by their link code.
-- **Key Value**: Clean, uncluttered physical presentation; users only see the QR pattern and its reference code.
+- **Problem Solved**: Standard Google Maps links open a general business page where mobile users struggle to find the review button, and multi-hop redirects cause drop-offs.
+- **Solution**:
+  1. Admin pastes any Google Maps link; it is immediately normalized to the official `search.google.com/local/writereview` dialog.
+  2. Customer scans QR: the page loads instantly with large visible praise tags and a procedural review draft.
+  3. 1 tap on the primary button copies the draft and instantly triggers the direct Google review modal.
 
 ---
 
 ## 2. User Experience & Visual Design
 
-### Key User Flows
+### Key Flows
 
-1. **Batch Print Tab Download**:
-   - The user opens the "Batch Print & Inventory" tab.
-   - Beside the existing "Print A4 Sheet" and "Grid Density" controls, a primary button labeled **"Download Batch PNGs (ZIP)"** with a folder/archive icon is available.
-   - When clicked, a progress indicator displays real-time generation progress (e.g., `"Rendering QR 4 of 24 (16%)..."`).
-   - Once completed, the browser automatically triggers the download of `[BatchName]_QRCodes.zip`.
+1. **Customer Scan & Instant Launch**:
+   - Customer opens `/r/:slug` on mobile.
+   - Large, legible touch tags are shown first (e.g., `Delicious Food`, `Fast Service`).
+   - 1-2 authentic reviews are ready immediately.
+   - Tapping the prominent button copies the review and immediately launches the Google 5-star review dialog.
+   - If opened in mobile browser or app, direct intent links ensure immediate opening.
 
-2. **Links Table Batch Group Download**:
-   - In the "Dynamic Links & QR Roster" table, each batch folder/group header shows a dedicated button: **"Download ZIP (PNGs)"**.
-   - Clicking downloads all links belonging to that specific batch in seconds.
+2. **Admin Auto-Conversion Experience**:
+   - In `CreateLinkModal` or `EditDestinationModal`, pasting any Maps link triggers real-time normalization.
+   - A clean badge confirms: `"✓ Auto-converted to Direct 5-Star Review Dialog"`.
 
-3. **High-Resolution PNG Canvas Spec (No URLs)**:
-   - Dimensions: 1024 × 1140 px (300 DPI crisp output).
-   - Top / Center: Clean QR code with adequate quiet margin (32px padding).
-   - Bottom Center Label:
-     - Prominent bold link code (e.g., `CODE: #D8K2`) in dark monospace tabular font (`font-bold text-2xl`).
-     - **No short link or URL printed on the image canvas**.
+3. **QR PNG Asset Spec**:
+   - Dimensions: 1024 × 1140 px.
+   - High-contrast QR code centered.
+   - Bottom center label: bold 4-character code (e.g. `CODE: #D8K2`).
+   - Zero business name text, zero URL text.
 
 ---
 
 ## 3. Technical Architecture & Implementation Details
 
 ```
-┌────────────────────────────────────────────────────────┐
-│ UI Layer: BatchPrintPage.tsx & LinksTable.tsx          │
-│ ┌────────────────────────┐  ┌────────────────────────┐ │
-│ │ Batch Print Tab Button │  │ Group Row ZIP Button   │ │
-│ └───────────┬────────────┘  └───────────┬────────────┘ │
-└─────────────┼───────────────────────────┼──────────────┘
-              │                           │
-              ▼                           ▼
-┌────────────────────────────────────────────────────────┐
-│ batchZipHelper.ts (Client-side fast generation)        │
-│ ┌────────────────────────────────────────────────────┐ │
-│ │ 1. Loop through links array in batch               │ │
-│ │ 2. Canvas: render QR code at high resolution       │ │
-│ │ 3. Draw clean footer with ONLY bold Link Code      │ │
-│ │    (Explicitly omitting any short URLs or links)   │ │
-│ │ 4. Export canvas to PNG Blob                       │ │
-│ │ 5. Add to JSZip instance: [CODE]_[TITLE].png       │ │
-│ │ 6. jszip.generateAsync({ type: 'blob' })           │ │
-│ │ 7. Trigger browser file download                   │ │
-│ └────────────────────────────────────────────────────┘ │
-└────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ Admin Inputs Google Maps Link                                │
+│ (maps.app.goo.gl / Place ID / CID)                           │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│ mapsUrlHelper.ts & GET /api/resolve-maps-url                 │
+│ 1. Extracts Place ID / CID                                   │
+│ 2. Resolves short links to search.google.com/local/writereview│
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Saved to Firestore & SQLite as Direct Review Dialog URL      │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Customer Scan: ReviewGatekeeperView.tsx                      │
+│ ┌──────────────────────────────────────────────────────────┐ │
+│ │ 1. Instant 0ms load with bold praise tags & review draft │ │
+│ │ 2. Synchronous clipboard copy                            │ │
+│ │ 3. Immediate window launch to writereview (5-star popup) │ │
+│ └──────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-### File Changes
+### Component Adjustments
 
-1. **`src/utils/batchZipHelper.ts` (New)**:
-   - Implements `exportBatchQRsAsZip(batchName: string, links: LinkRecord[], onProgress?: (percent: number, current: number, total: number) => void): Promise<void>`.
-   - Uses `qrcode` and HTML5 canvas to render crisp PNG cards with ONLY the bold link code printed underneath (no URLs).
-   - Packages all PNGs into a ZIP using `jszip` (already in `package.json`).
-   - Downloads the ZIP file directly to the client's device without server load.
+1. **`src/components/ReviewGatekeeperView.tsx`**:
+   - Optimize the click handler for immediate execution (`navigator.clipboard.writeText` + `window.open` / `window.location.assign`).
+   - Ensure direct review URLs open without intermediate redirects.
 
-2. **`src/components/BatchPrintPage.tsx`**:
-   - Add "Download ZIP (PNGs)" button to the batch generation / inventory action bars.
-   - Wire generation progress state so users see instant visual feedback.
+2. **`src/utils/mapsUrlHelper.ts`**:
+   - Real-time client & server resolution for `maps.app.goo.gl`, `goo.gl/maps`, `ChIJ...`, and `cid=...`.
 
-3. **`src/components/LinksTable.tsx`**:
-   - In batch group headers, add a compact "Download ZIP" action alongside the existing print sheet action.
+3. **`server.ts`**:
+   - Maintain the active `/api/resolve-maps-url` endpoint to follow redirects safely and extract Place IDs.
 
-4. **`src/components/ClientRedirectHandler.tsx` Fix**:
-   - Remove the orphaned condition leftover around line 647 that caused the earlier compilation error so the build remains 100% clean.
+4. **`src/utils/batchZipHelper.ts`**:
+   - Keep canvas layout rendering the 4-digit code at the bottom (`CODE: #${code}`) with business names and URLs omitted.
+
+5. **`src/components/CreateLinkModal.tsx` & `src/components/EditDestinationModal.tsx`**:
+   - Wire maps link auto-conversion on input.
+   - Support custom category typing with dynamic tag generation.
+   - Include direct "Download QR Code" options inside the destination configuration view.
 
 ---
 
 ## 4. Verification Plan
 
-1. Verify build compilation using `compile_applet`.
-2. Test generating a batch in Batch Print tab and clicking "Download Batch PNGs (ZIP)".
-3. Verify that the downloaded ZIP contains individual PNG files named `[CODE]_[Title].png` with sharp QR codes and ONLY the link code printed below (no URL).
-4. Test clicking "Download ZIP" on batch groups in the Links Table.
+1. Verify build compilation using `lint_applet` and `compile_applet`.
+2. Test scan-to-review button on `/r/:slug` and verify clipboard copy + immediate launch of Google's direct review dialog.
+3. Test pasting short and long Google Maps links and verify auto-conversion.
+4. Verify downloaded QR PNG has the 4-digit code at the bottom with no business name or URL text.

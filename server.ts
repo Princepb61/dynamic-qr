@@ -2073,6 +2073,102 @@ async function startServer() {
     res.send(vcfContent);
   });
 
+  // Google Maps URL Resolver & Direct Review Canonicalizer
+  app.get('/api/resolve-maps-url', async (req: Request, res: Response) => {
+    const rawUrl = String(req.query.url || '').trim();
+    if (!rawUrl) {
+      return res.status(400).json({ error: 'URL query parameter is required.' });
+    }
+
+    try {
+      // 1. Direct Place ID check
+      const chijMatch = rawUrl.match(/(ChIJ[a-zA-Z0-9_-]{20,})/);
+      if (chijMatch && chijMatch[1]) {
+        return res.json({
+          success: true,
+          placeId: chijMatch[1],
+          reviewUrl: `https://search.google.com/local/writereview?placeid=${chijMatch[1]}`,
+        });
+      }
+
+      // 2. Direct CID check
+      const cidMatch = rawUrl.match(/[?&]cid=([0-9]+)/i);
+      if (cidMatch && cidMatch[1]) {
+        return res.json({
+          success: true,
+          cid: cidMatch[1],
+          reviewUrl: `https://search.google.com/local/writereview?cid=${cidMatch[1]}`,
+        });
+      }
+
+      // 3. Follow redirect for maps.app.goo.gl or goo.gl/maps
+      let targetUrl = rawUrl;
+      if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+        targetUrl = `https://${targetUrl}`;
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const resp = await fetch(targetUrl, {
+        method: 'GET',
+        redirect: 'follow',
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      const finalUrl = resp.url || targetUrl;
+
+      // Check final URL for placeid
+      const finalChij = finalUrl.match(/(ChIJ[a-zA-Z0-9_-]{20,})/);
+      if (finalChij && finalChij[1]) {
+        return res.json({
+          success: true,
+          placeId: finalChij[1],
+          reviewUrl: `https://search.google.com/local/writereview?placeid=${finalChij[1]}`,
+        });
+      }
+
+      // Check final URL for CID
+      const finalCid = finalUrl.match(/[?&]cid=([0-9]+)/i);
+      if (finalCid && finalCid[1]) {
+        return res.json({
+          success: true,
+          cid: finalCid[1],
+          reviewUrl: `https://search.google.com/local/writereview?cid=${finalCid[1]}`,
+        });
+      }
+
+      // If text place name extracted from /place/Name/...
+      const placeNameMatch = finalUrl.match(/\/place\/([^/@?]+)/i);
+      if (placeNameMatch && placeNameMatch[1]) {
+        const placeName = decodeURIComponent(placeNameMatch[1].replace(/\+/g, ' '));
+        return res.json({
+          success: true,
+          placeName,
+          reviewUrl: `https://www.google.com/search?q=${encodeURIComponent(placeName + ' reviews')}`,
+        });
+      }
+
+      return res.json({
+        success: true,
+        reviewUrl: finalUrl,
+      });
+    } catch (err: any) {
+      console.warn('Failed to resolve maps link:', err?.message);
+      return res.json({
+        success: false,
+        reviewUrl: rawUrl,
+        error: err?.message,
+      });
+    }
+  });
+
   // 3. Edit dynamic link destination
   app.put('/api/links/:id', (req: Request, res: Response) => {
     const { id } = req.params;

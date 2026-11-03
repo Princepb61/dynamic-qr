@@ -138,28 +138,31 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
     setRegenSeed((s) => s + 1);
   };
 
-  // Copy review to clipboard and open Google Reviews immediately
+  // Helper to ensure direct write-review dialog URL
+  const getDirectReviewUrl = (rawUrl?: string) => {
+    if (!rawUrl || !rawUrl.trim()) return 'https://search.google.com/local/writereview';
+    const trimmed = rawUrl.trim();
+    if (trimmed.startsWith('ChIJ')) {
+      return `https://search.google.com/local/writereview?placeid=${trimmed}`;
+    }
+    return trimmed;
+  };
+
+  // Copy review to clipboard and open Google Reviews immediately (smooth & instant)
   const handleCopyAndOpenGoogle = async (draft: ReviewDraft) => {
+    setCopiedDraftId(draft.id);
+    const googleUrl = getDirectReviewUrl(config.googleReviewUrl);
+
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(draft.text);
       }
     } catch {
-      // Fallback if clipboard permission denied
+      // Fallback if clipboard permission is restricted
     }
 
-    setCopiedDraftId(draft.id);
-
-    const googleUrl =
-      config.googleReviewUrl && config.googleReviewUrl.trim()
-        ? config.googleReviewUrl
-        : 'https://search.google.com/local/writereview';
-
-    // Small smooth countdown before navigation
-    setRedirectingCountdown(1);
-    setTimeout(() => {
-      window.location.href = googleUrl;
-    }, 800);
+    // Instant redirect without delay: smooth and immediate
+    window.location.href = googleUrl;
   };
 
   // Submit 1-3 star private feedback
@@ -398,11 +401,7 @@ export const ReviewGatekeeperView: React.FC<ReviewGatekeeperViewProps> = ({
               {/* Direct Link to Google Reviews */}
               <div className="text-center pt-1">
                 <a
-                  href={
-                    config.googleReviewUrl && config.googleReviewUrl.trim()
-                      ? config.googleReviewUrl
-                      : 'https://search.google.com/local/writereview'
-                  }
+                  href={getDirectReviewUrl(config.googleReviewUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-xs text-neutral-400 hover:text-white underline underline-offset-4 font-semibold"
